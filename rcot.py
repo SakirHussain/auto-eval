@@ -1,11 +1,43 @@
-from langchain_ollama import OllamaLLM
-from jsonformer import Jsonformer
 from pydantic import BaseModel, Field
+from langchain_core.output_parsers import PydanticOutputParser
+from langchain_core.exceptions import OutputParserException
+from langchain.prompts import PromptTemplate
+from langchain_ollama import OllamaLLM
+import re
 
-# Step 1: Initialize the DeepSeek model from Ollama
+# Initialize the DeepSeek R1 model
 model = OllamaLLM(model="deepseek-r1:7b")
 
-# Step 2: Define schema models for structured output
+
+def safe_parse(parser, llm_response):
+    """Safely parses the LLM response with retry on failure, removing <think> tags if present."""
+    
+    # Step 1: Remove <think> tags and content inside them
+    llm_response_cleaned = re.sub(r"<think>.*?</think>", "", llm_response, flags=re.DOTALL).strip()
+    print(f"\n--- Cleaned LLM Response ---\n{llm_response_cleaned}")
+
+    # Step 2: Try parsing the cleaned response
+    try:
+        return parser.parse(llm_response_cleaned)
+    except OutputParserException as e:
+        print("\n--- Parsing Failed ---")
+        print(f"Error: {e}\nRaw Cleaned LLM Response:\n{llm_response_cleaned}")
+
+        # Retry with additional instructions
+        print("\nRetrying with additional format instructions...")
+        prompt_retry = """
+        Ensure the response strictly follows the JSON format below without any additional text:
+        {
+            "problem": "Your problem description here."
+        }
+        """
+        print(prompt_retry)
+
+        # Return None to indicate failure for further handling
+        return None
+
+
+# Define Pydantic models for structured output
 class ProblemReconstructionSchema(BaseModel):
     problem: str = Field(..., description="The reconstructed problem description.")
 
@@ -17,81 +49,112 @@ class ConditionComparisonSchema(BaseModel):
     deducible: bool = Field(..., description="Whether the condition is deducible from the other conditions.")
     explanation: str = Field(..., description="An explanation for why the condition is or isn't deducible.")
 
-# Helper function to invoke Jsonformer with DeepSeek
-def run_jsonformer(schema, prompt):
-    """Runs Jsonformer on the provided schema and prompt."""
-    jsonformer = Jsonformer(
-        model=model,  # DeepSeek model
-        tokenizer=None,  # No separate tokenizer needed for Ollama
-        json_schema=schema,
-        prompt=prompt
-    )
-    return jsonformer()
-
-# Step 3: Define functions for structured tasks
-
 def reconstruct_problem(response: str) -> str:
-    """Reconstructs the problem using Jsonformer."""
-    json_schema = {
-        "type": "object",
-        "properties": {
-            "problem": {"type": "string"}
-        },
-        "required": ["problem"]
-    }
+    """Reconstructs the problem using a structured output parser."""
+    parser = PydanticOutputParser(pydantic_object=ProblemReconstructionSchema)
 
-    prompt = f"Reconstruct the problem based on this answer: {response}"
-    result = run_jsonformer(json_schema, prompt)
-    return result.get("problem", "")
+    # Update the prompt to be more explicit
+    prompt = PromptTemplate(
+        template="""
+        Based on the following answer, reconstruct the problem.
+
+        Ensure your response is a JSON object exactly in this format:
+        {{
+            "problem": "Your problem description here."
+        }}
+
+        {format_instructions}
+
+        Answer: {response}
+        """,
+        input_variables=["response"],
+        partial_variables={"format_instructions": parser.get_format_instructions()}
+    )
+
+    # Run the model and parse the response safely
+    llm_response = model(prompt.format(response=response))
+    print(f"\n--- LLM Response ---\n{llm_response}")
+    
+    result = safe_parse(parser, llm_response)
+    return result.problem if result else "Error in reconstruction."
+
 
 def decompose_conditions(query: str) -> list[str]:
-    """Extracts conditions using Jsonformer."""
-    json_schema = {
-        "type": "object",
-        "properties": {
-            "conditions": {
-                "type": "array",
-                "items": {"type": "string"}
-            }
-        },
-        "required": ["conditions"]
-    }
+    """Extracts conditions using a structured output parser."""
+    parser = PydanticOutputParser(pydantic_object=ConditionDecompositionSchema)
 
-    prompt = f"Extract all conditions from the following problem: {query}"
-    result = run_jsonformer(json_schema, prompt)
-    return result.get("conditions", [])
+    prompt = PromptTemplate(
+        template="""
+        Extract all conditions from the following problem.
+
+        Ensure your response is a JSON object exactly in this format:
+        {{
+            "conditions": [
+                "Condition 1",
+                "Condition 2",
+                ...
+            ]
+        }}
+
+        {format_instructions}
+
+        Problem: {query}
+        """,
+        input_variables=["query"],
+        partial_variables={"format_instructions": parser.get_format_instructions()}
+    )
+
+    llm_response = model(prompt.format(query=query))
+    print(f"\n--- LLM Response ---\n{llm_response}")
+    
+    result = safe_parse(parser, llm_response)
+    return result.conditions if result else []
+
 
 def compare_condition(condition: str, condition_list: list[str]) -> dict:
-    """Compares a condition against known conditions using Jsonformer."""
-    json_schema = {
-        "type": "object",
-        "properties": {
-            "condition": {"type": "string"},
-            "deducible": {"type": "boolean"},
-            "explanation": {"type": "string"}
-        },
-        "required": ["condition", "deducible", "explanation"]
-    }
+    """Compares a condition against known conditions using a structured output parser."""
+    parser = PydanticOutputParser(pydantic_object=ConditionComparisonSchema)
 
-    prompt = (
-        f"Check if the condition '{condition}' can be deduced from the following conditions:\n"
-        f"{condition_list}\nProvide the response in JSON format."
+    prompt = PromptTemplate(
+        template="""
+        Check if the condition '{condition}' can be deduced from the following conditions:
+        {condition_list}
+
+        Ensure your response is a JSON object exactly in this format:
+        {{
+            "condition": "{condition}",
+            "deducible": true or false,
+            "explanation": "Provide a brief explanation."
+        }}
+
+        {format_instructions}
+        """,
+        input_variables=["condition", "condition_list"],
+        partial_variables={"format_instructions": parser.get_format_instructions()}
     )
-    result = run_jsonformer(json_schema, prompt)
+
+    llm_response = model(prompt.format(condition=condition, condition_list="\n".join(condition_list)))
+    result = safe_parse(parser, llm_response)
     return {
-        "condition": result.get("condition"),
-        "deducible": result.get("deducible"),
-        "explanation": result.get("explanation")
+        "condition": result.condition if result else condition,
+        "deducible": result.deducible if result else False,
+        "explanation": result.explanation if result else "Error in comparison."
     }
 
-# Step 4: Implement fine-grained comparison
 
 def fine_grained_comparison(original_query: str, student_response: str):
     """Performs fine-grained comparison between the original and reconstructed problems."""
     # Step 1: Reconstruct problem and extract conditions
     reconstructed_problem = reconstruct_problem(student_response)
+    print(f"\n--- Reconstructed Problem ---\n{reconstructed_problem}")
+    
     original_conditions = decompose_conditions(original_query)
+    print("\n--- Original Conditions ---")
+    print(original_conditions)
+    
     reconstructed_conditions = decompose_conditions(reconstructed_problem)
+    print("\n--- Reconstructed Conditions ---")
+    print(reconstructed_conditions)
 
     # Step 2: Identify overlooked and hallucinated conditions
     overlooked_conditions = [cond for cond in original_conditions if cond not in reconstructed_conditions]
@@ -113,16 +176,16 @@ def fine_grained_comparison(original_query: str, student_response: str):
     print(f"\nScore: {score:.2f}%")
     return {"overlooked": overlooked_conditions, "hallucinated": hallucinated_conditions, "score": score}
 
-# Step 5: Main function to evaluate questions
+
 
 def evaluate_questions(questions, student_answers):
-    """Evaluates student answers using Jsonformer for structured output."""
+    """Evaluates student answers using structured output handling."""
     for question, answer in zip(questions, student_answers):
         print(f"\n--- Evaluating Question ---\n{question}")
         feedback = fine_grained_comparison(question, answer)
         print("Feedback:", feedback)
 
-# Example usage
+
 if __name__ == "__main__":
     example_questions = [
         "90 people are divided into groups of 9. How many groups are there?",
