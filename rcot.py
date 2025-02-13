@@ -5,6 +5,9 @@ from langchain.prompts import PromptTemplate
 from langchain_ollama import OllamaLLM
 import re
 
+from few_shot_examples import FewShotExamples
+
+
 # Initialize the DeepSeek R1 model
 model = OllamaLLM(model="deepseek-r1:7b")
 
@@ -52,11 +55,20 @@ class ConditionComparisonSchema(BaseModel):
 def reconstruct_problem(response: str) -> str:
     """Reconstructs the problem using a structured output parser."""
     parser = PydanticOutputParser(pydantic_object=ProblemReconstructionSchema)
+    
+    few_shot_examples = FewShotExamples.problem_reconstruction_examples()  # Get examples
 
     # Update the prompt to be more explicit
     prompt = PromptTemplate(
         template="""
-        Based on the following answer, reconstruct the problem.
+        USER:
+        Give the concrete prompt (problem) that can generate this answer, specified by the 'Answer' field.
+        The problem should contain all basic and necessary information and correspond to the answer.
+        The problem can only ask for one result. 
+        
+        No information must be assumed or added. Only infer from that which is provided
+        
+        Here are some examples : {few_shot_examples}
 
         Ensure your response is a JSON object exactly in this format:
         {{
@@ -68,7 +80,8 @@ def reconstruct_problem(response: str) -> str:
         Answer: {response}
         """,
         input_variables=["response"],
-        partial_variables={"format_instructions": parser.get_format_instructions()}
+        partial_variables={"format_instructions": parser.get_format_instructions(),
+                           "few_shot_examples": few_shot_examples}
     )
 
     # Run the model and parse the response safely
@@ -82,11 +95,18 @@ def reconstruct_problem(response: str) -> str:
 def decompose_conditions(query: str) -> list[str]:
     """Extracts conditions using a structured output parser."""
     parser = PydanticOutputParser(pydantic_object=ConditionDecompositionSchema)
+    
+    few_shot_examples = FewShotExamples.condition_extraction_examples()  # Get examples
+
 
     prompt = PromptTemplate(
         template="""
-        Extract all conditions from the following problem.
-
+        Please list the conditions of the problem, as specifed by the 'Problem' field. There may be multiple conditions.
+        Do not list conditions not related to calculations, but list all necessary conditions.
+        The format should be a list of conditions with one condition per item.
+        
+        Here are some examples : {few_shot_examples}
+        
         Ensure your response is a JSON object exactly in this format:
         {{
             "conditions": [
@@ -101,7 +121,8 @@ def decompose_conditions(query: str) -> list[str]:
         Problem: {query}
         """,
         input_variables=["query"],
-        partial_variables={"format_instructions": parser.get_format_instructions()}
+        partial_variables={"format_instructions": parser.get_format_instructions(),
+                           "few_shot_examples": few_shot_examples}
     )
 
     llm_response = model(prompt.format(query=query))
@@ -114,11 +135,21 @@ def decompose_conditions(query: str) -> list[str]:
 def compare_condition(condition: str, condition_list: list[str]) -> dict:
     """Compares a condition against known conditions using a structured output parser."""
     parser = PydanticOutputParser(pydantic_object=ConditionComparisonSchema)
+    
+    few_shot_examples = FewShotExamples.condition_comparison_examples()  # Get examples
 
     prompt = PromptTemplate(
         template="""
-        Check if the condition '{condition}' can be deduced from the following conditions:
-        {condition_list}
+        Given a candidate condition: '{condition}'
+        
+        Here is a condition list: '{condition_list}'
+        
+        From a mathematical point of view, can this candidate condition be deduced from the condition list?
+        Please illustrate your reason and answer True or False.
+        
+        No information must be assumed or added. Only infer from that which is provided
+        
+        Here are some examples : {few_shot_examples}
 
         Ensure your response is a JSON object exactly in this format:
         {{
@@ -130,7 +161,8 @@ def compare_condition(condition: str, condition_list: list[str]) -> dict:
         {format_instructions}
         """,
         input_variables=["condition", "condition_list"],
-        partial_variables={"format_instructions": parser.get_format_instructions()}
+        partial_variables={"format_instructions": parser.get_format_instructions(),
+                           "few_shot_examples": few_shot_examples}
     )
 
     llm_response = model(prompt.format(condition=condition, condition_list="\n".join(condition_list)))
