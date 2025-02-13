@@ -1,8 +1,7 @@
 class BasicQuestions:
     """A class representing a list of basic questions."""
     questions = [
-        "What is the capital of France?",
-        "What is Parthivi's favorite flower?",
+        "Elucidate the crucial role of embodiment in the cognitive development process with an example of a warehouse robot that is designed to navigate through the cluttered environment. Give the details of the three types of embodiment hypothesis for the above scenario."
     ]
 
     @classmethod
