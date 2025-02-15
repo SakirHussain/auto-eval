@@ -10,7 +10,7 @@ from prompt_templates import BasicPromptTemplate, DetailedExplanationPromptTempl
 from questions import BasicQuestions, AdvancedQuestions
 
 # Step 1: Initialize the model
-model = OllamaLLM(model="deepseek-r1:7b")
+model = OllamaLLM(model="deepseek-r1:7b", temperature=0.7)
 
 # Step 2: Load the corpus and create the vector store
 
