@@ -1,193 +1,336 @@
-PS D:\college\capstone\auto eval> python .\rcot.py
+PS D:\college\capstone\auto eval> python .\proactive_chain_of_thought.py
 
---- Evaluating Question ---
-90 people are divided into groups of 9. How many groups are there?
-D:\college\capstone\auto eval\rcot.py:75: LangChainDeprecationWarning: The method `BaseLLM.__call__` was deprecated in langchain-core 0.1.7 and will be removed in 1.0. Use :meth:`~invoke` instead.
-  llm_response = model(prompt.format(response=response))
+--- Running Clarification Dialogue Evaluation ---
 
---- LLM Response ---
+--- Prompt ---
+
+
+        You are a professor evaluating a student's answer. You need to fairly evaluete the student's answer based on the rubric.
+        The max marks possible for this question is 5. You need to decide how many marks to award or deduct based on the rubric provided.
+
+        The question, student answer, ideal answer and rubric are provided within the respective <question>, <student_answer>, <ideal_answer> and <rubric> tags.
+
+        Your task is to analyze the response using the Clarification Dialogue evaluation approach.
+        Description of evaluation approach :
+
+    - Identify missing, unclear, or ambiguous details in the student's answer.
+    - Deduct marks based on missing information.
+    - Explain why marks were deducted.
+
+
+        Based on these given input, choose an action from the available actions.
+        Given:
+        - D (Task Background): "You are a teacher grading a student's answer based on the rubric."
+        - C (Conversation History): "[]"
+        - A (Available Actions): ['Deduct marks', 'Add marks']
+
+        Any addtion or deduction of marks must be based on whether the rubrics is satisfied or not. No information must be assumed or added. Only infer from that which is provided
+
+        Ensure your response is a JSON object exactly in this format:
+        '''json
+            "thought_process": "Reasoning before selecting an action.",
+            "action_taken": "Chosen action based on evaluation.",
+            "response": "Generated feedback with deductions or awards.",
+            "final_adjusted_score": 0.0
+        '''
+
+        The output should be formatted as a JSON instance that conforms to the JSON schema below.
+
+As an example, for the schema {"properties": {"foo": {"title": "Foo", "description": "a list of strings", "type": "array", "items": {"type": "string"}}}, "required": ["foo"]}
+the object {"foo": ["bar", "baz"]} is a well-formatted instance of the schema. The object {"properties": {"foo": ["bar", "baz"]}} is not well-formatted.
+
+Here is the output schema:
+```
+{"properties": {"thought_process": {"description": "Reasoning before selecting an action.", "title": "Thought Process", "type": "string"}, "action_taken": {"description": "Chosen action based on evaluation.", "title": "Action Taken", "type": "string"}, "response": {"description": "Generated feedback with deductions or awards.", "title": "Response", "type": "string"}, "final_adjusted_score": {"description": "Final adjusted score after refinements.", "title": "Final Adjusted Score", "type": "number"}}, "required": ["thought_process", "action_taken", "response", "final_adjusted_score"]}
+```
+
+        <question>
+        Compare and contrast perception model and sensor model.
+        </question>
+
+        <student_answer>
+
+The Perception Model is designed to convert sensor data into an understanding of the environmental state. It interprets sensor inputs to infer meaning by handling transformations necessary for invariant object recognition. This model focuses on processing data through various representations, such as feature space and predicates, to achieve recognition invariance. By transforming raw sensor inputs into meaningful insights, the perception model enables intelligent decision-making in various applications.
+
+In contrast, the Sensor Model primarily captures and records raw sensor data without interpretation. Its main functionality is to collect and store sensor inputs directly, preserving them for further processing or storage. Unlike the perception model, which processes data to extract meaning, the sensor model serves as the foundational layer, ensuring that raw data is available for subsequent analysis and interpretation.
+
+        </student_answer>
+
+        <ideal_answer>
+
+The Perception Model determines the state of the system based on sensor inputs. It processes raw sensory data (e.g., camera images, LiDAR readings, or touch sensors) and converts them into meaningful information about the robot’s environment and internal state. For Example - A self-driving car uses camera and LiDAR data to identify objects such as pedestrians and vehicles. The perception model processes these inputs to estimate the car’s surroundings and potential obstacles. The Sensor Model is the inverse of the Perception Model. Given a known system state, it predicts what the sensor readings should be. This is useful in localization, state estimation, and sensor fusion techniques. For Example - In robot localization, if the robot's position in a mapped environment is known, the sensor model can predict what the LiDAR or camera should detect from that location.
+
+        </ideal_answer>
+
+        <rubric>
+
+Perception Model : When given a sensor input, what is the state of the system → Perception Model (1 mark)
+Example (1.5 marks)
+Sensor Model : Inverse of Perception model. Given state of system what is the sensor input (1 mark)
+Example (1.5 marks)
+
+        </rubric>
+
+
+--- Raw LLM Response ---
 <think>
-Alright, so I need to reconstruct the problem based on the provided answer. The user's output is a JSON object that includes a problem description and its title. Let me look at the example they gave to understand how it should be structured.
+Okay, so I'm trying to evaluate this student's answer based on the rubric provided. Let me start by understanding what each part expects.
 
-In the example, for the schema {"properties": {"foo": ...}, "required": [...]}}, they provided an instance where "foo" is an array of strings. So I need to make sure that in my problem statement, it's correctly formatted as a string within an object.
+The question was to compare and contrast the Perception Model and the Sensor Model. The ideal answer explains that the Perception Model takes sensor inputs and determines the system state, while the Sensor Model does the opposite—taking a known system state to predict sensor readings. It also gives examples for both models.
 
-The answer given was: "There are 10 groups because 90 divided by 9 equals 10."
+Looking at the student's answer, they discussed how the Perception Model converts sensor data into environmental understanding and how it processes raw inputs for invariant object recognition. They contrasted this with the Sensor Model, which captures raw data without interpretation. The student provided some examples but didn't go as deep as the ideal answer did.
 
-Okay, so the key here is understanding how division applies to grouping items. If there are 90 items and each group has 9, dividing gives us 10 groups. So maybe the problem involves distributing something into groups.
+Now, checking the rubric: each model is worth 1 mark based on clarity, and 1.5 marks for a good example explanation. The student's answer explains both models correctly but doesn't provide detailed examples. They also mention transformations and invariance more than the rubric requires.
 
-I need to think of a scenario where someone calculates the number of groups by dividing the total quantity by the size per group. Perhaps something like students in classes or books on shelves.
-
-Let me frame it clearly: There are 90 students, each shelf holds 9 books; how many shelves do we need? Or more generally, if you have X items and they're grouped into Y each, how many groups?
-
-I should make sure the problem is clear so that when someone reads it, they can perform the division to get 10. It's essential that the numbers align with the answer provided.
-
-So putting it together: The problem could be about calculating the number of groups when dividing a total quantity by the size per group. I'll phrase it in a real-world context to make it relatable.
+So, I think the student met the basic criteria—knowing which model does what—but didn't elaborate enough on the examples. Therefore, they've earned 1 mark for each model explanation without the additional points from the ideal answer.
 </think>
 
-The problem involves determining the number of groups formed by dividing a total quantity into sets of specific sizes.
-
-**Step-by-Step Explanation:**
-
-1. **Identify the Total Quantity and Group Size:** The total is 90 items, each group consists of 9 items.
-
-2. **Set Up the Division Equation:** To find the number of groups (N), divide the total quantity by the size per group:
-   \[
-   N = \frac{90}{9}
-   \]
-
-3. **Perform the Calculation:**
-   \[
-   N = 10
-   \]
-
-4. **Conclusion:** Dividing 90 items into groups of 9 results in exactly 10 groups.
-
-**Answer:** There are 10 groups because 90 divided by 9 equals 10.
+The student's answer correctly identifies both models but lacks detailed and specific examples as required by the rubric.
 
 ```json
 {
-    "problem": "There are 10 groups because 90 divided by 9 equals 10."
+    "thought_process": "The student correctly identified the functions of both models but did not provide detailed or specific examples, which are essential for earning full marks.",
+    "action_taken": "Deduct marks",
+    "response": "The student's answer is correct in explaining the roles of the Perception and Sensor Models but lacks the depth and specific examples required to earn maximum marks. The rubric expects clear demonstration through examples.",
+    "final_adjusted_score": 1
 }
 ```
 
 --- Cleaned LLM Response ---
-The problem involves determining the number of groups formed by dividing a total quantity into sets of specific sizes.
-
-**Step-by-Step Explanation:**
-
-1. **Identify the Total Quantity and Group Size:** The total is 90 items, each group consists of 9 items.
-
-2. **Set Up the Division Equation:** To find the number of groups (N), divide the total quantity by the size per group:
-   \[
-   N = \frac{90}{9}
-   \]
-
-3. **Perform the Calculation:**
-   \[
-   N = 10
-   \]
-
-4. **Conclusion:** Dividing 90 items into groups of 9 results in exactly 10 groups.
-
-**Answer:** There are 10 groups because 90 divided by 9 equals 10.
+The student's answer correctly identifies both models but lacks detailed and specific examples as required by the rubric.
 
 ```json
 {
-    "problem": "There are 10 groups because 90 divided by 9 equals 10."
+    "thought_process": "The student correctly identified the functions of both models but did not provide detailed or specific examples, which are essential for earning full marks.",
+    "action_taken": "Deduct marks",
+    "response": "The student's answer is correct in explaining the roles of the Perception and Sensor Models but lacks the depth and specific examples required to earn maximum marks. The rubric expects clear demonstration through examples.",
+    "final_adjusted_score": 1
 }
 ```
 
---- Reconstructed Problem ---
-There are 10 groups because 90 divided by 9 equals 10.
+--- Evaluation Result ---
+thought_process='The student correctly identified the functions of both models but did not provide detailed or specific examples, which are essential for earning full marks.' action_taken='Deduct marks' response="The student's answer is correct in explaining the roles of the Perception and Sensor Models but lacks the depth and specific examples required to earn maximum marks. The rubric expects clear demonstration through examples." final_adjusted_score=1.0
 
---- LLM Response ---
+--- Clarification Dialogue Completed ---
+thought_process='The student correctly identified the functions of both models but did not provide detailed or specific examples, which are essential for earning full marks.' action_taken='Deduct marks' response="The student's answer is correct in explaining the roles of the Perception and Sensor Models but lacks the depth and specific examples required to earn maximum marks. The rubric expects clear demonstration through examples." final_adjusted_score=1.0
+
+--- Running Target-Guided Dialogue Evaluation ---
+
+--- Prompt ---
+
+
+        You are a professor evaluating a student's answer. You need to fairly evaluete the student's answer based on the rubric.
+        The max marks possible for this question is 5. You need to decide how many marks to award or deduct based on the rubric provided.
+
+        The question, student answer, ideal answer and rubric are provided within the respective <question>, <student_answer>, <ideal_answer> and <rubric> tags.
+
+        Your task is to analyze the response using the Target-Guided Dialogue evaluation approach.
+        Description of evaluation approach :
+
+    - Determine how many transformations (steps or turns) are needed to thematically convert the student's answer into the ideal answer.
+    - Deduct marks based on the number of necessary transformations. To further assist you with the evaluation, the thematic similarity score and TF-IDF similarity score are provided.
+
+
+        Based on these given input, choose an action from the available actions.
+        Given:
+        - D (Task Background): "You are a teacher grading a student's answer based on the rubric."
+        - C (Conversation History): "[]"
+        - A (Available Actions): ['Deduct marks', 'Add marks']
+
+        Any addtion or deduction of marks must be based on whether the rubrics is satisfied or not. No information must be assumed or added. Only infer from that which is provided
+
+        Ensure your response is a JSON object exactly in this format:
+        '''json
+            "thought_process": "Reasoning before selecting an action.",
+            "action_taken": "Chosen action based on evaluation.",
+            "response": "Generated feedback with deductions or awards.",
+            "final_adjusted_score": 0.0
+        '''
+
+        The output should be formatted as a JSON instance that conforms to the JSON schema below.
+
+As an example, for the schema {"properties": {"foo": {"title": "Foo", "description": "a list of strings", "type": "array", "items": {"type": "string"}}}, "required": ["foo"]}
+the object {"foo": ["bar", "baz"]} is a well-formatted instance of the schema. The object {"properties": {"foo": ["bar", "baz"]}} is not well-formatted.
+
+Here is the output schema:
+```
+{"properties": {"thought_process": {"description": "Reasoning before selecting an action.", "title": "Thought Process", "type": "string"}, "action_taken": {"description": "Chosen action based on evaluation.", "title": "Action Taken", "type": "string"}, "response": {"description": "Generated feedback with deductions or awards.", "title": "Response", "type": "string"}, "final_adjusted_score": {"description": "Final adjusted score after refinements.", "title": "Final Adjusted Score", "type": "number"}}, "required": ["thought_process", "action_taken", "response", "final_adjusted_score"]}
+```
+
+        <question>
+        Compare and contrast perception model and sensor model.
+        </question>
+
+        <student_answer>
+
+The Perception Model is designed to convert sensor data into an understanding of the environmental state. It interprets sensor inputs to infer meaning by handling transformations necessary for invariant object recognition. This model focuses on processing data through various representations, such as feature space and predicates, to achieve recognition invariance. By transforming raw sensor inputs into meaningful insights, the perception model enables intelligent decision-making in various applications.
+
+In contrast, the Sensor Model primarily captures and records raw sensor data without interpretation. Its main functionality is to collect and store sensor inputs directly, preserving them for further processing or storage. Unlike the perception model, which processes data to extract meaning, the sensor model serves as the foundational layer, ensuring that raw data is available for subsequent analysis and interpretation.
+
+        </student_answer>
+
+        <ideal_answer>
+
+The Perception Model determines the state of the system based on sensor inputs. It processes raw sensory data (e.g., camera images, LiDAR readings, or touch sensors) and converts them into meaningful information about the robot’s environment and internal state. For Example - A self-driving car uses camera and LiDAR data to identify objects such as pedestrians and vehicles. The perception model processes these inputs to estimate the car’s surroundings and potential obstacles. The Sensor Model is the inverse of the Perception Model. Given a known system state, it predicts what the sensor readings should be. This is useful in localization, state estimation, and sensor fusion techniques. For Example - In robot localization, if the robot's position in a mapped environment is known, the sensor model can predict what the LiDAR or camera should detect from that location.
+
+        </ideal_answer>
+
+        <rubric>
+
+Perception Model : When given a sensor input, what is the state of the system → Perception Model (1 mark)
+Example (1.5 marks)
+Sensor Model : Inverse of Perception model. Given state of system what is the sensor input (1 mark)
+Example (1.5 marks)
+
+        </rubric>
+
+
+--- Raw LLM Response ---
 <think>
-Alright, I need to extract all conditions from the given problem where 90 people are divided into groups of 9 and determine how many groups there are.
+Alright, so I'm trying to figure out how to evaluate this student's answer based on the rubric provided. The question was about comparing and contrasting the perception model and the sensor model. Let me break down what each part entails.
 
-First, let's break down the problem statement:
-- There are a total of 90 people.
-- These 90 people are being divided into smaller groups.
-- Each group consists of 9 people.
+First, looking at the ideal answer, it clearly states that the Perception Model uses sensor inputs to determine the system state, like a self-driving car using cameras and LiDAR. Then, the Sensor Model is described as the inverse—using known system states to predict sensor data, such as how a robot would detect obstacles based on its position.
 
-So, the conditions here are straightforward. The first condition is that there are exactly 90 individuals involved. The second condition specifies that each subgroup or group must contain precisely 9 people. This setup allows us to calculate the number of groups by dividing the total number of people by the size of each group.
+Now, checking the student's answer: They correctly explain that the Perception Model converts sensor data into environmental understanding for decision-making. The Sensor Model is described as capturing raw data without interpretation, serving as a foundational layer.
+
+Comparing this to the rubric, both models are addressed with 1 mark each if explained clearly. The student seems to have covered both models and provided examples, so they meet the criteria. There's no mention of missing points or unclear explanations, so I don't see any deductions needed.
+</think>
+
+The student has correctly described both the Perception Model and the Sensor Model, including their functions and examples. This meets the rubric requirements for both models.
+
+```json
+{
+    "thought_process": "The student accurately defined both the perception model and sensor model, providing clear explanations with relevant examples. Both models were addressed as per the rubric.",
+    "action_taken": "Add marks",
+    "response": "The student's answer is correct and meets all criteria in the rubric. No deductions are needed.",
+    "final_adjusted_score": 5.0
+}
+```
+
+--- Cleaned LLM Response ---
+The student has correctly described both the Perception Model and the Sensor Model, including their functions and examples. This meets the rubric requirements for both models.
+
+```json
+{
+    "thought_process": "The student accurately defined both the perception model and sensor model, providing clear explanations with relevant examples. Both models were addressed as per the rubric.",
+    "action_taken": "Add marks",
+    "response": "The student's answer is correct and meets all criteria in the rubric. No deductions are needed.",
+    "final_adjusted_score": 5.0
+}
+```
+
+--- Evaluation Result ---
+thought_process='The student accurately defined both the perception model and sensor model, providing clear explanations with relevant examples. Both models were addressed as per the rubric.' action_taken='Add marks' response="The student's answer is correct and meets all criteria in the rubric. No deductions are needed." final_adjusted_score=5.0
+
+--- Target-Guided Dialogue Completed ---
+thought_process='The student accurately defined both the perception model and sensor model, providing clear explanations with relevant examples. Both models were addressed as per the rubric.' action_taken='Add marks' response="The student's answer is correct and meets all criteria in the rubric. No deductions are needed." final_adjusted_score=5.0
+
+--- Running Non-Collaborative Dialogue Evaluation ---
+
+--- Prompt ---
+
+
+        You are a professor evaluating a student's answer. You need to fairly evaluete the student's answer based on the rubric.
+        The max marks possible for this question is 5. You need to decide how many marks to award or deduct based on the rubric provided.
+
+        The question, student answer, ideal answer and rubric are provided within the respective <question>, <student_answer>, <ideal_answer> and <rubric> tags.
+
+        Your task is to analyze the response using the Non-Collaborative Dialogue evaluation approach.
+        Description of evaluation approach :
+
+     - Detect if the student's answer is off-topic, vague, or irrelevant.
+    - Deduct marks accordingly and list the detected issues.
+
+
+        Based on these given input, choose an action from the available actions.
+        Given:
+        - D (Task Background): "You are a teacher grading a student's answer based on the rubric."
+        - C (Conversation History): "[]"
+        - A (Available Actions): ['Deduct marks', 'Add marks']
+
+        Any addtion or deduction of marks must be based on whether the rubrics is satisfied or not. No information must be assumed or added. Only infer from that which is provided
+
+        Ensure your response is a JSON object exactly in this format:
+        '''json
+            "thought_process": "Reasoning before selecting an action.",
+            "action_taken": "Chosen action based on evaluation.",
+            "response": "Generated feedback with deductions or awards.",
+            "final_adjusted_score": 0.0
+        '''
+
+        The output should be formatted as a JSON instance that conforms to the JSON schema below.
+
+As an example, for the schema {"properties": {"foo": {"title": "Foo", "description": "a list of strings", "type": "array", "items": {"type": "string"}}}, "required": ["foo"]}
+the object {"foo": ["bar", "baz"]} is a well-formatted instance of the schema. The object {"properties": {"foo": ["bar", "baz"]}} is not well-formatted.
+
+Here is the output schema:
+```
+{"properties": {"thought_process": {"description": "Reasoning before selecting an action.", "title": "Thought Process", "type": "string"}, "action_taken": {"description": "Chosen action based on evaluation.", "title": "Action Taken", "type": "string"}, "response": {"description": "Generated feedback with deductions or awards.", "title": "Response", "type": "string"}, "final_adjusted_score": {"description": "Final adjusted score after refinements.", "title": "Final Adjusted Score", "type": "number"}}, "required": ["thought_process", "action_taken", "response", "final_adjusted_score"]}
+```
+
+        <question>
+        Compare and contrast perception model and sensor model.
+        </question>
+
+        <student_answer>
+
+The Perception Model is designed to convert sensor data into an understanding of the environmental state. It interprets sensor inputs to infer meaning by handling transformations necessary for invariant object recognition. This model focuses on processing data through various representations, such as feature space and predicates, to achieve recognition invariance. By transforming raw sensor inputs into meaningful insights, the perception model enables intelligent decision-making in various applications.
+
+In contrast, the Sensor Model primarily captures and records raw sensor data without interpretation. Its main functionality is to collect and store sensor inputs directly, preserving them for further processing or storage. Unlike the perception model, which processes data to extract meaning, the sensor model serves as the foundational layer, ensuring that raw data is available for subsequent analysis and interpretation.
+
+        </student_answer>
+
+        <ideal_answer>
+
+The Perception Model determines the state of the system based on sensor inputs. It processes raw sensory data (e.g., camera images, LiDAR readings, or touch sensors) and converts them into meaningful information about the robot’s environment and internal state. For Example - A self-driving car uses camera and LiDAR data to identify objects such as pedestrians and vehicles. The perception model processes these inputs to estimate the car’s surroundings and potential obstacles. The Sensor Model is the inverse of the Perception Model. Given a known system state, it predicts what the sensor readings should be. This is useful in localization, state estimation, and sensor fusion techniques. For Example - In robot localization, if the robot's position in a mapped environment is known, the sensor model can predict what the LiDAR or camera should detect from that location.
+
+        </ideal_answer>
+
+        <rubric>
+
+Perception Model : When given a sensor input, what is the state of the system → Perception Model (1 mark)
+Example (1.5 marks)
+Sensor Model : Inverse of Perception model. Given state of system what is the sensor input (1 mark)
+Example (1.5 marks)
+
+        </rubric>
+
+
+--- Raw LLM Response ---
+<think>
+Alright, let's evaluate the student's answer based on the provided rubric and the Non-Collaborative Dialogue approach.
+
+First, I'll compare the student's answer to the ideal answer. The student did a good job explaining both models but could have been more concise. They used examples effectively with the perception model in self-driving cars and localization, which aligns well with the rubric.
+
+Looking at the rubric, each part is worth 1 mark for explanation and another 0.5 marks for an example. The student covered both parts adequately, so they meet the criteria. However, there's room for improvement in conciseness without losing clarity. Also, using bullet points or bold headings could enhance readability.
+
+The response from the student is clear but lacks structure. It might benefit from a more organized format with headings to make each model distinct and easier to follow.
 </think>
 
 ```json
 {
-    "conditions": [
-        "There are 90 people in total",
-        "The people are divided into groups of 9"
-    ]
+    "thought_process": "The student's answer provides a detailed comparison of perception and sensor models, using relevant examples. However, it could be more concise by organizing the information into clear sections or bullet points for better readability.",
+    "action_taken": "Deduct 0.5 marks due to lack of conciseness but maintaining clarity. The response is accurate and meets the rubric's criteria except for presentation.",
+    "response": "The student's answer is correct in content but could be more concise by organizing information into clear sections or bullet points. They provided appropriate examples, which align with the rubric.",
+    "final_adjusted_score": 4.5
 }
 ```
 
 --- Cleaned LLM Response ---
 ```json
 {
-    "conditions": [
-        "There are 90 people in total",
-        "The people are divided into groups of 9"
-    ]
+    "thought_process": "The student's answer provides a detailed comparison of perception and sensor models, using relevant examples. However, it could be more concise by organizing the information into clear sections or bullet points for better readability.",
+    "action_taken": "Deduct 0.5 marks due to lack of conciseness but maintaining clarity. The response is accurate and meets the rubric's criteria except for presentation.",
+    "response": "The student's answer is correct in content but could be more concise by organizing information into clear sections or bullet points. They provided appropriate examples, which align with the rubric.",
+    "final_adjusted_score": 4.5
 }
 ```
 
---- Original Conditions ---
-['There are 90 people in total', 'The people are divided into groups of 9']
+--- Evaluation Result ---
+thought_process="The student's answer provides a detailed comparison of perception and sensor models, using relevant examples. However, it could be more concise by organizing the information into clear sections or bullet points for better readability." action_taken="Deduct 0.5 marks due to lack of conciseness but maintaining clarity. The response is accurate and meets the rubric's criteria except for presentation." response="The student's answer is correct in content but could be more concise by organizing information into clear sections or bullet points. They provided appropriate examples, which align with the rubric." final_adjusted_score=4.5
 
---- LLM Response ---
-<think>
-Alright, so I've been given this problem where it says there are 10 groups because 90 divided by 9 equals 10. My task is to extract all the conditions from this statement and format them into a JSON object as per the specified schema.
+--- Non-Collaborative Dialogue Completed ---
+thought_process="The student's answer provides a detailed comparison of perception and sensor models, using relevant examples. However, it could be more concise by organizing the information into clear sections or bullet points for better readability." action_taken="Deduct 0.5 marks due to lack of conciseness but maintaining clarity. The response is accurate and meets the rubric's criteria except for presentation." response="The student's answer is correct in content but could be more concise by organizing information into clear sections or bullet points. They provided appropriate examples, which align with the rubric." final_adjusted_score=4.5
 
-First, let me understand what exactly constitutes a condition here. The user provided an example where they had a problem about groups, division, and the result being 10. So I think each condition should be a separate statement that can be extracted from the main problem.
-
-Looking at the sample problem: "There are 10 groups because 90 divided by 9 equals 10." From this, it seems like there's an action or calculation happening—dividing 90 by 9 to get 10. So perhaps each condition is about what happened before that result.
-
-But wait, in the example response they had two conditions: "Number of groups" and "Result equals 10." Hmm, maybe I need to break down the problem into parts that are conditions leading up to the conclusion.
-
-Wait, actually, looking at their example output, it's {"conditions": ["Number of groups", "Result equals 10"]}. So each condition is a statement about what needs to be true or known. In this case, knowing how many groups there are and that they result in 10 when divided by the number of participants.
-
-But wait, maybe I'm overcomplicating it. The problem itself gives two key pieces of information: 90 divided by 9 equals 10, which implies that each group has 10 members because dividing total into groups gives per-group size. So the conditions could be:
-
-1. There are 90 participants.
-2. These are divided into groups equally.
-3. Each group must have exactly 10 people.
-
-But in the example they had only two conditions, so perhaps each condition is a separate statement that can be extracted. In their problem, "Number of groups equals 10" and "Each group has 10 members." So maybe I should extract those two as conditions.
-
-Wait, but according to their sample response, for the problem about division leading to 10, they had two conditions: number of groups and result equals 10. Hmm, so in my case, perhaps each condition is a statement that can be extracted from the given text.
-
-Looking again at the sample:
-
-Problem: "There are 10 groups because 90 divided by 9 equals 10."
-
-Their response was {"conditions": ["Number of groups", "Result equals 10"]} which makes sense because they took apart the problem into what led to the result and the actual calculation.
-
-So applying that to my problem: The text says there are 10 groups, but it's because when you divide 90 by 9, you get 10. So perhaps each condition is about the factors involved—number of participants (90) divided by group size (9), which results in 10 groups.
-
-Wait, maybe I need to structure it as conditions that lead to the conclusion. Alternatively, looking at their sample, they treated "Number of groups" as a separate condition and then the result. So perhaps each part before the reasoning is considered a condition.
-
-But wait, maybe more accurately, the problem statement says two things: 1) there are 90 participants divided into groups, resulting in 10 groups. Or rather, it's given that when you divide 90 by 9, you get 10, which means the number of groups is 10.
-
-So perhaps each condition would be:
-
-- The total number of participants is 90.
-- When divided into equal groups of 9 people each, there are 10 groups.
-
-But wait, that's more than two conditions. Alternatively, maybe it's just about the division itself and what the result was.
-
-Alternatively, considering their example had "Number of groups" as a condition and then the mathematical calculation leading to the result, perhaps in my case, I should extract each part before the conclusion.
-
-Wait, but in their sample problem, they only had one way: number of groups equals 10 because 90 divided by 9 is 10. So maybe for that specific problem, two conditions were extracted. Hmm, now I'm confused.
-
-Alternatively, perhaps each condition is a separate fact or statement derived from the problem. In this case, "Number of groups is 10" and "Division of 90 by 9 equals 10."
-
-So in JSON format, that would translate to:
-
-{
-    "conditions": [
-        "Number of groups",
-        "Result equals 10"
-    ]
-}
-
-But wait, in the sample problem, they had a slightly different phrasing: "Number of groups" and "Result equals 10." But in my case, I think it's similar. So applying that logic here.
-
-Wait, but perhaps more accurately, each condition is an individual fact or statement about what needs to be true based on the given problem. In this case:
-
-- There are a certain number of groups.
-- The division leads to 10 as the result.
-
-So in JSON terms, it would translate to two conditions: "Number of groups" and "Result equals 10."
-
-Wait, but actually, when I look at their sample output, they had "Number of groups" and "Result equals 10." So maybe that's how I should structure mine as well.
-
-So in summary, the problem says there are 10 groups because dividing 90 by 9 gives 10. Therefore, each condition is a separate statement: one about the number of groups being 10 and another about the division result being 10.
-</think>
-
-{"conditions": ["Number of groups", "Result equals 10"]}
-
---- Cleaned LLM Response ---
-{"conditions": ["Number of groups", "Result equals 10"]}
-
---- Reconstructed Conditions ---
-['Number of groups', 'Result equals 10']
+--- Final Evaluation Summary ---
+Total Score: 3.5
