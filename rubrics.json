@@ -1,0 +1,13 @@
+{
+    "question": "Compare and contrast perception model and sensor model.",
+    "rubric": {
+      "total_marks": 10,
+      "topics": {
+        "Explanation of Perception Model": 2,
+        "Explanation of Sensor Model": 2,
+        "Example of Perception Model": 3,
+        "Example of Sensor Model": 3
+      }
+    },
+    "corpus_path": "C:/Users/KIRTI/Downloads/chap 1 cog.pdf"
+  }

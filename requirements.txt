@@ -6,3 +6,4 @@ faiss-cpu
 //ragwodiag//pymupdf
 pypdf
 sentence-transformers
+spacy

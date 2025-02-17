@@ -14,10 +14,6 @@ class AnswerEvaluationSchema(BaseModel):
     completeness: int = Field(..., ge=0, le=10, description="Score for covering all necessary details (0-10).")
     relevance: int = Field(..., ge=0, le=10, description="Score for staying focused on the question (0-10).")
     clarity_expression: int = Field(..., ge=0, le=10, description="Score for readability and coherence (0-10).")
-    perception_model: float = Field(..., ge=0, le=1, description="Score for mentioning that when given a sensor input, the state of the system is the Perception Model (0-1).")
-    perception_example: float = Field(..., ge=0, le=1.5, description="Score for giving an example of Perception Model (0-1.5).")
-    sesor_model: float = Field(..., ge=0, le=1, description="Score for mentioning that sensor model is the Inverse of Perception model and it determines sensor input given state of the system (0-1).")
-    sensor_example: float = Field(..., ge=0, le=1.5, description="Score for giving an example of Sensor Model (0-1.5).")
     overall_score: int = Field(..., ge=0, le=55, description="Final cumulative score based on rubric (0-55).")
     feedback: List[str] = Field(..., description="Detailed feedback on strengths and weaknesses of the answer.")
 
