@@ -9,6 +9,26 @@ import spacy
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
+nlp = spacy.load("en_core_web_md")
+
+def compute_thematic_similarity(student_answer: str, ideal_answer: str):
+    """
+    Computes semantic similarity between the student's answer and the ideal answer using word embeddings.
+    Returns a similarity score between 0 (completely different) and 1 (identical).
+    """
+    student_doc = nlp(student_answer)
+    ideal_doc = nlp(ideal_answer)
+    return student_doc.similarity(ideal_doc)
+
+def compute_tfidf_similarity(student_answer: str, ideal_answer: str):
+    """
+    Computes TF-IDF similarity to check if the keyphrases in the student answer align with the ideal answer.
+    Returns a cosine similarity score (closer to 1 = better match).
+    """
+    vectorizer = TfidfVectorizer()
+    vectors = vectorizer.fit_transform([student_answer, ideal_answer])
+    return cosine_similarity(vectors)[0, 1]
+
 # Initialize DeepSeek R1 model
 model = OllamaLLM(model="deepseek-r1:7b", temperature=0.45)
 
@@ -51,6 +71,16 @@ def safe_parse(parser, llm_response):
 def evaluate_dialogue(dialogue_type, dialgoue_desc ,question, student_answer, ideal_answer, rubric, conversation_history, available_actions):
     """Evaluates student answers using ProCoT with a structured prompt and output parser."""
     
+    thematic_sim = "Not Calculated"
+    tfidf_sim = "Not Calculated"
+    
+    if dialogue_type == "Target-Guided Dialogue":
+        thematic_sim = compute_thematic_similarity(student_answer, ideal_answer)
+        tfidf_sim = compute_tfidf_similarity(student_answer, ideal_answer)
+        
+    print("--- thematic_sim: ", thematic_sim)
+    print("--- tfidf_sim: ", tfidf_sim)
+    
     parser = PydanticOutputParser(pydantic_object=ProCoTOutput)
     
     prompt = PromptTemplate(
@@ -72,6 +102,8 @@ def evaluate_dialogue(dialogue_type, dialgoue_desc ,question, student_answer, id
     - Student Answer: <student_answer>{student_answer}</student_answer>  
     - Ideal Answer: <ideal_answer>{ideal_answer}</ideal_answer>  
     - Rubric: <rubric>{rubric}</rubric>  
+    - Thematic Similarity: {thematic_sim}
+    - TF-IDF Similarity: {tfidf_sim}
 
     Evaluation Framework (Proactive Chain of Thought)
     You must strictly follow the ProCoT framework to ensure structured grading.  
@@ -98,7 +130,7 @@ def evaluate_dialogue(dialogue_type, dialgoue_desc ,question, student_answer, id
 
     {format_instructions}
     """,
-    input_variables=["dialogue_type", "dialogue_desc", "question", "student_answer", "ideal_answer", "rubric", "conversation_history", "available_actions"],
+    input_variables=["dialogue_type", "dialogue_desc", "question", "student_answer", "ideal_answer", "rubric", "conversation_history", "available_actions", "thematic_sim", "tfidf_sim"],
     partial_variables={"format_instructions": parser.get_format_instructions()}
 )
 
@@ -113,6 +145,8 @@ def evaluate_dialogue(dialogue_type, dialgoue_desc ,question, student_answer, id
         rubric=rubric,
         conversation_history=conversation_history,
         available_actions=available_actions,
+        thematic_sim= thematic_sim,
+        tfidf_sim=tfidf_sim
     )
 
     # print(f"\n--- Prompt ---\n")
