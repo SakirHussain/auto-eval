@@ -1,7 +1,7 @@
 import streamlit as st
 import json
 import os
-from rag_w_cot_pydantics import main as generate_answer_main  # Import main function for answer generation
+from rag_json_OP import main as generate_answer_main  # Import main function for answer generation
 from proactive_chain_of_thought import main as evaluate_answer_main  # Import main function for evaluation
 
 # Define the JSON files for storing data
