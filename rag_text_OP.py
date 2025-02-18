@@ -5,21 +5,13 @@ from langchain_ollama import OllamaLLM
 from langchain_community.vectorstores import FAISS
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_core.output_parsers import PydanticOutputParser
-from pydantic import BaseModel, Field
-from typing import List, Dict
+from langchain_core.exceptions import OutputParserException
 from langchain_community.document_loaders import PyPDFLoader
 
 # Step 1: Initialize Model
-model = OllamaLLM(model="deepseek-r1:7b")
+model = OllamaLLM(model="deepseek-r1:7b", temperature=0.7)
 
-# Step 2: Define Schema for Answer Generation with Dynamic Rubrics
-class GeneratedAnswerSchema(BaseModel):
-    answer: str = Field(..., description="Generated answer based on retrieved context and rubric-based reasoning.")
-
-parser = PydanticOutputParser(pydantic_object=GeneratedAnswerSchema)
-
-# Step 3: Define Utility Functions
+# Step 2: Define Utility Functions
 
 def clean_text(text):
     """Custom function to clean and normalize text."""
@@ -28,7 +20,7 @@ def clean_text(text):
     return text
 
 def remove_think_tags(text):
-    """Removes <think> tags from LLM output."""
+    """Removes <think> tags and their content."""
     return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
 
 def load_and_clean_corpus(file_path):
@@ -51,16 +43,17 @@ def retrieve_relevant_docs(question, vector_store):
     relevant_docs = vector_store.similarity_search(question, k=5)
     return relevant_docs[:3]
 
-# Step 4: Define the RAG Chain with CoT for Answer Generation with Rubric Enforcement
+# Step 3: Define the RAG Chain with CoT for Answer Generation in Paragraph Format
 def rag_generate(question, rubric, corpus_path):
-    """Execute RAG with dynamic reasoning, rubric-based constraints, and CoT for answer generation."""
+    """Execute RAG with dynamic reasoning, rubric-based constraints, and CoT for answer generation in paragraph format."""
     vector_store = create_vector_store(corpus_path)
     relevant_docs = retrieve_relevant_docs(question, vector_store)
     context = "\n\n".join([doc.page_content for doc in relevant_docs])
     
     prompt_template = PromptTemplate(
         template="""
-        You are an AI assistant generating an answer based on retrieved knowledge. Use a Chain-of-Thought (CoT) approach to reason through the question and extract key insights.
+        You are an AI assistant generating a detailed, structured answer based on retrieved knowledge. 
+        Use a Chain-of-Thought (CoT) approach to reason through the question and extract key insights.
         
         Ensure the answer adheres to the following rubric, covering all required topics with the given weightage:
         
@@ -76,22 +69,19 @@ def rag_generate(question, rubric, corpus_path):
         {context}
         </context>
         
-        Generate a structured answer step by step, ensuring factual accuracy and coherence while meeting rubric criteria.
-        Output must be in the following JSON format:
-        {format_instructions}
+        Generate a detailed and descriptive answer in paragraph format. 
+        The answer should include all required elements from the rubric and must be well-structured.
+        The output should ONLY contain the generated answer as a full text paragraph without any additional formatting, labels, or explanations.
         """,
-        input_variables=["question", "context", "rubric"],
-        partial_variables={"format_instructions": parser.get_format_instructions()}
+        input_variables=["question", "context", "rubric"]
     )
     
     chain = prompt_template | model
     llm_response = chain.invoke({"question": question, "context": context, "rubric": rubric})
     
-    # Remove <think> tags before parsing
+    # Remove <think> tags before returning the final response
     cleaned_response = remove_think_tags(llm_response)
-    
-    # Ensure structured response via Pydantic validation
-    return parser.parse(cleaned_response)
+    return cleaned_response
 
 # Accept input from JSON file
 if __name__ == "__main__":
