@@ -1,4 +1,3 @@
-import json
 import re
 from langchain.prompts import PromptTemplate
 from langchain_ollama import OllamaLLM
@@ -84,13 +83,13 @@ def rag_generate(question, rubric, corpus_path):
     return cleaned_response
 
 # Accept input from JSON file
-if __name__ == "__main__":
-    with open("rubrics.json", "r") as file:
-        data = json.load(file)
+# if __name__ == "__main__":
+#     with open("rubrics.json", "r") as file:
+#         data = json.load(file)
     
-    question = data["question"]
-    rubric = data["rubric"]  # Dynamically accepts rubric with topics and weightage
-    corpus_path = data["corpus_path"]
+#     question = data["question"]
+#     rubric = data["rubric"]  # Dynamically accepts rubric with topics and weightage
+#     corpus_path = data["corpus_path"]
     
-    generated_answer = rag_generate(question, rubric, corpus_path)
-    print(generated_answer)
+#     generated_answer = rag_generate(question, rubric, corpus_path)
+#     print(generated_answer)
