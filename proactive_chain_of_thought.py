@@ -12,19 +12,13 @@ from sklearn.metrics.pairwise import cosine_similarity
 nlp = spacy.load("en_core_web_md")
 
 def compute_thematic_similarity(student_answer: str, ideal_answer: str):
-    """
-    Computes semantic similarity between the student's answer and the ideal answer using word embeddings.
-    Returns a similarity score between 0 (completely different) and 1 (identical).
-    """
+    """Computes thematic similarity between student answer and ideal answer."""
     student_doc = nlp(student_answer)
     ideal_doc = nlp(ideal_answer)
     return student_doc.similarity(ideal_doc)
 
 def compute_tfidf_similarity(student_answer: str, ideal_answer: str):
-    """
-    Computes TF-IDF similarity to check if the keyphrases in the student answer align with the ideal answer.
-    Returns a cosine similarity score (closer to 1 = better match).
-    """
+    """Computes TF-IDF similarity between student answer and ideal answer."""
     vectorizer = TfidfVectorizer()
     vectors = vectorizer.fit_transform([student_answer, ideal_answer])
     return cosine_similarity(vectors)[0, 1]
@@ -32,11 +26,8 @@ def compute_tfidf_similarity(student_answer: str, ideal_answer: str):
 # Initialize DeepSeek R1 model
 model = OllamaLLM(model="deepseek-r1:7b", temperature=0.45)
 
-# Load NLP Model
 nlp = spacy.load("en_core_web_md")
 
-
-# Define structured Pydantic output
 class ProCoTOutput(BaseModel):
     thought_process: str = Field(..., description="Reasoning before selecting an action.")
     action_taken: str = Field(..., description="Chosen action based on evaluation.")
@@ -44,7 +35,7 @@ class ProCoTOutput(BaseModel):
     final_adjusted_score: float = Field(..., description="Final adjusted score after refinements.")
 
 
-# Function to clean and parse LLM responses
+# safe parsing
 def safe_parse(parser, llm_response):
     """Safely parses the LLM response, ensuring strict JSON format compliance."""
     
@@ -78,7 +69,7 @@ def evaluate_dialogue(dialogue_type, dialgoue_desc ,question, student_answer, id
         thematic_sim = compute_thematic_similarity(student_answer, ideal_answer)
         tfidf_sim = compute_tfidf_similarity(student_answer, ideal_answer)
         
-    print("--- thematic_sim: ", thematic_sim)
+    print("\n--- thematic_sim: ", thematic_sim)
     print("--- tfidf_sim: ", tfidf_sim)
     
     parser = PydanticOutputParser(pydantic_object=ProCoTOutput)
