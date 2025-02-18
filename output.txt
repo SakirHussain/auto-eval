@@ -1,193 +1,150 @@
-PS D:\college\capstone\auto eval> python .\rcot.py
+PS D:\college\capstone\auto eval> python .\proactive_chain_of_thought.py
+--- thematic_sim:  Not Calculated
+--- tfidf_sim:  Not Calculated
 
---- Evaluating Question ---
-90 people are divided into groups of 9. How many groups are there?
-D:\college\capstone\auto eval\rcot.py:75: LangChainDeprecationWarning: The method `BaseLLM.__call__` was deprecated in langchain-core 0.1.7 and will be removed in 1.0. Use :meth:`~invoke` instead.
-  llm_response = model(prompt.format(response=response))
+--- Running Clarification Dialogue Evaluation ---
 
---- LLM Response ---
+--- Raw LLM Response ---
 <think>
-Alright, so I need to reconstruct the problem based on the provided answer. The user's output is a JSON object that includes a problem description and its title. Let me look at the example they gave to understand how it should be structured.
+Okay, so I'm trying to figure out how to grade this student's response based on the provided rubric. Let me start by understanding what each part of the rubric entails.
 
-In the example, for the schema {"properties": {"foo": ...}, "required": [...]}}, they provided an instance where "foo" is an array of strings. So I need to make sure that in my problem statement, it's correctly formatted as a string within an object.
+The rubric has four main sections: Task Background (D), Conversation History (C), Available Actions (A), and Scoring Guidelines. The task here is for a teacher to grade a student's answer using this rubric.
 
-The answer given was: "There are 10 groups because 90 divided by 9 equals 10."
+First, I need to parse the student's response. It looks like they've answered with some detailed analysis about the impact of an event on a character and how literary techniques contribute to that understanding. They mention things like diction, syntax, organization, and specific references from the text.
 
-Okay, so the key here is understanding how division applies to grouping items. If there are 90 items and each group has 9, dividing gives us 10 groups. So maybe the problem involves distributing something into groups.
+Next, looking at the rubric:
 
-I need to think of a scenario where someone calculates the number of groups by dividing the total quantity by the size per group. Perhaps something like students in classes or books on shelves.
+- **9-8 Range**: High-quality analysis with insightful discussion, precise references, effective control.
+- **5**: Reductive thesis, superficial, misinterpretations, lack of consistency.
+- **4-3**: Inaccurate or undeveloped, misread passage, misconstrued references, weak diction/syntax/orphanage.
+- **2-1**: Confused thinking, grammar issues, brief, incoherent.
+- **0**: Minimal response with no more than a reference.
 
-Let me frame it clearly: There are 90 students, each shelf holds 9 books; how many shelves do we need? Or more generally, if you have X items and they're grouped into Y each, how many groups?
+The student's response is quite detailed and seems to cover multiple aspects of the rubric. They mention literary techniques like diction, syntax, and organization, providing specific references from the text. The analysis appears thorough and well-structured, which suggests it meets higher standards.
 
-I should make sure the problem is clear so that when someone reads it, they can perform the division to get 10. It's essential that the numbers align with the answer provided.
+However, I notice that they didn't explicitly state how each technique contributes to the dramatic impact on the character. While their points touch upon this, perhaps they could have made a more direct link between the techniques and the character's experience. This might be seen as slightly less precise or overly broad in some contexts.
 
-So putting it together: The problem could be about calculating the number of groups when dividing a total quantity by the size per group. I'll phrase it in a real-world context to make it relatable.
-</think>
+Additionally, the response is quite lengthy but lacks a clear thesis statement that ties everything together. It touches on several elements but doesn't prioritize them effectively, which might make it seem less focused than necessary for an 8/9 score.
 
-The problem involves determining the number of groups formed by dividing a total quantity into sets of specific sizes.
-
-**Step-by-Step Explanation:**
-
-1. **Identify the Total Quantity and Group Size:** The total is 90 items, each group consists of 9 items.
-
-2. **Set Up the Division Equation:** To find the number of groups (N), divide the total quantity by the size per group:
-   \[
-   N = \frac{90}{9}
-   \]
-
-3. **Perform the Calculation:**
-   \[
-   N = 10
-   \]
-
-4. **Conclusion:** Dividing 90 items into groups of 9 results in exactly 10 groups.
-
-**Answer:** There are 10 groups because 90 divided by 9 equals 10.
-
-```json
-{
-    "problem": "There are 10 groups because 90 divided by 9 equals 10."
-}
-```
-
---- Cleaned LLM Response ---
-The problem involves determining the number of groups formed by dividing a total quantity into sets of specific sizes.
-
-**Step-by-Step Explanation:**
-
-1. **Identify the Total Quantity and Group Size:** The total is 90 items, each group consists of 9 items.
-
-2. **Set Up the Division Equation:** To find the number of groups (N), divide the total quantity by the size per group:
-   \[
-   N = \frac{90}{9}
-   \]
-
-3. **Perform the Calculation:**
-   \[
-   N = 10
-   \]
-
-4. **Conclusion:** Dividing 90 items into groups of 9 results in exactly 10 groups.
-
-**Answer:** There are 10 groups because 90 divided by 9 equals 10.
-
-```json
-{
-    "problem": "There are 10 groups because 90 divided by 9 equals 10."
-}
-```
-
---- Reconstructed Problem ---
-There are 10 groups because 90 divided by 9 equals 10.
-
---- LLM Response ---
-<think>
-Alright, I need to extract all conditions from the given problem where 90 people are divided into groups of 9 and determine how many groups there are.
-
-First, let's break down the problem statement:
-- There are a total of 90 people.
-- These 90 people are being divided into smaller groups.
-- Each group consists of 9 people.
-
-So, the conditions here are straightforward. The first condition is that there are exactly 90 individuals involved. The second condition specifies that each subgroup or group must contain precisely 9 people. This setup allows us to calculate the number of groups by dividing the total number of people by the size of each group.
+Considering all this, I think the student deserves close to a 7 or possibly an 8 because their analysis is detailed and shows a good understanding of literary techniques' role in affecting the reader's experience. However, there's room for more focus on the specific thesis and tighter organization around that central idea.
 </think>
 
 ```json
 {
-    "conditions": [
-        "There are 90 people in total",
-        "The people are divided into groups of 9"
-    ]
+    "thought_process": "The student provided a detailed analysis with specific references from the text, discussing literary techniques like diction, syntax, and organization. They touched upon how these contribute to the dramatic impact but didn't clearly link each technique to the character's experience. The response is thorough but could be more focused on a clear thesis.",
+    "action_taken": "Deduct 0.5 from the score due to lack of precise thesis linking techniques to impact, though analysis was detailed and relevant.",
+    "response": "The student's response demonstrates understanding but misses a clear central thesis tying literary techniques to character experience.",
+    "final_adjusted_score": 7
 }
 ```
 
 --- Cleaned LLM Response ---
 ```json
 {
-    "conditions": [
-        "There are 90 people in total",
-        "The people are divided into groups of 9"
-    ]
+    "thought_process": "The student provided a detailed analysis with specific references from the text, discussing literary techniques like diction, syntax, and organization. They touched upon how these contribute to the dramatic impact but didn't clearly link each technique to the character's experience. The response is thorough but could be more focused on a clear thesis.",
+    "action_taken": "Deduct 0.5 from the score due to lack of precise thesis linking techniques to impact, though analysis was detailed and relevant.",
+    "response": "The student's response demonstrates understanding but misses a clear central thesis tying literary techniques to character experience.",
+    "final_adjusted_score": 7
 }
 ```
 
---- Original Conditions ---
-['There are 90 people in total', 'The people are divided into groups of 9']
+--- Evaluation Result ---
+thought_process="The student provided a detailed analysis with specific references from the text, discussing literary techniques like diction, syntax, and organization. They touched upon how these contribute to the dramatic impact but didn't clearly link each technique to the character's experience. The response is thorough but could be more focused on a clear thesis." action_taken='Deduct 0.5 from the score due to lack of precise thesis linking techniques to impact, though analysis was detailed and relevant.' response="The student's response demonstrates understanding but misses a clear central thesis tying literary techniques to character experience." final_adjusted_score=7.0
 
---- LLM Response ---
+--- Clarification Dialogue Completed ---
+thought_process="The student provided a detailed analysis with specific references from the text, discussing literary techniques like diction, syntax, and organization. They touched upon how these contribute to the dramatic impact but didn't clearly link each technique to the character's experience. The response is thorough but could be more focused on a clear thesis." action_taken='Deduct 0.5 from the score due to lack of precise thesis linking techniques to impact, though analysis was detailed and relevant.' response="The student's response demonstrates understanding but misses a clear central thesis tying literary techniques to character experience." final_adjusted_score=7.0
+--- thematic_sim:  0.9923316240310669
+--- tfidf_sim:  0.8588309388317478
+
+--- Running Target-Guided Dialogue Evaluation ---
+
+--- Raw LLM Response ---
 <think>
-Alright, so I've been given this problem where it says there are 10 groups because 90 divided by 9 equals 10. My task is to extract all the conditions from this statement and format them into a JSON object as per the specified schema.
+Alright, I'm trying to figure out how to grade this student's response based on the provided rubric. The task is about analyzing a literary passage and evaluating the student's essay using a specific scoring guide.
 
-First, let me understand what exactly constitutes a condition here. The user provided an example where they had a problem about groups, division, and the result being 10. So I think each condition should be a separate statement that can be extracted from the main problem.
+First, I'll look at the student's answer. They discussed the impact of the dramatic experience on the main character and mentioned literary techniques used by McCarthy. Their analysis was somewhat accurate but maybe not very deep or precise. They did mention specific references from the text, which is good.
 
-Looking at the sample problem: "There are 10 groups because 90 divided by 9 equals 10." From this, it seems like there's an action or calculation happening—dividing 90 by 9 to get 10. So perhaps each condition is about what happened before that result.
+Now, looking at the rubric: The 9-8 band requires a reductive thesis with insightful links between techniques and reader's understanding, showing sophisticated analysis. This student's essay meets this by linking themes to literary devices but might not be as precise or deep.
 
-But wait, in the example response they had two conditions: "Number of groups" and "Result equals 10." Hmm, maybe I need to break down the problem into parts that are conditions leading up to the conclusion.
+For the 5 score, it's considered reductive with superficial discussion and lack of consistent control. The student did mention techniques but perhaps didn't elaborate enough or made misinterpretations. Their analysis was somewhat developed but could have been more precise.
 
-Wait, actually, looking at their example output, it's {"conditions": ["Number of groups", "Result equals 10"]}. So each condition is a statement about what needs to be true or known. In this case, knowing how many groups there are and that they result in 10 when divided by the number of participants.
-
-But wait, maybe I'm overcomplicating it. The problem itself gives two key pieces of information: 90 divided by 9 equals 10, which implies that each group has 10 members because dividing total into groups gives per-group size. So the conditions could be:
-
-1. There are 90 participants.
-2. These are divided into groups equally.
-3. Each group must have exactly 10 people.
-
-But in the example they had only two conditions, so perhaps each condition is a separate statement that can be extracted. In their problem, "Number of groups equals 10" and "Each group has 10 members." So maybe I should extract those two as conditions.
-
-Wait, but according to their sample response, for the problem about division leading to 10, they had two conditions: number of groups and result equals 10. Hmm, so in my case, perhaps each condition is a statement that can be extracted from the given text.
-
-Looking again at the sample:
-
-Problem: "There are 10 groups because 90 divided by 9 equals 10."
-
-Their response was {"conditions": ["Number of groups", "Result equals 10"]} which makes sense because they took apart the problem into what led to the result and the actual calculation.
-
-So applying that to my problem: The text says there are 10 groups, but it's because when you divide 90 by 9, you get 10. So perhaps each condition is about the factors involved—number of participants (90) divided by group size (9), which results in 10 groups.
-
-Wait, maybe I need to structure it as conditions that lead to the conclusion. Alternatively, looking at their sample, they treated "Number of groups" as a separate condition and then the result. So perhaps each part before the reasoning is considered a condition.
-
-But wait, maybe more accurately, the problem statement says two things: 1) there are 90 participants divided into groups, resulting in 10 groups. Or rather, it's given that when you divide 90 by 9, you get 10, which means the number of groups is 10.
-
-So perhaps each condition would be:
-
-- The total number of participants is 90.
-- When divided into equal groups of 9 people each, there are 10 groups.
-
-But wait, that's more than two conditions. Alternatively, maybe it's just about the division itself and what the result was.
-
-Alternatively, considering their example had "Number of groups" as a condition and then the mathematical calculation leading to the result, perhaps in my case, I should extract each part before the conclusion.
-
-Wait, but in their sample problem, they only had one way: number of groups equals 10 because 90 divided by 9 is 10. So maybe for that specific problem, two conditions were extracted. Hmm, now I'm confused.
-
-Alternatively, perhaps each condition is a separate fact or statement derived from the problem. In this case, "Number of groups is 10" and "Division of 90 by 9 equals 10."
-
-So in JSON format, that would translate to:
-
-{
-    "conditions": [
-        "Number of groups",
-        "Result equals 10"
-    ]
-}
-
-But wait, in the sample problem, they had a slightly different phrasing: "Number of groups" and "Result equals 10." But in my case, I think it's similar. So applying that logic here.
-
-Wait, but perhaps more accurately, each condition is an individual fact or statement about what needs to be true based on the given problem. In this case:
-
-- There are a certain number of groups.
-- The division leads to 10 as the result.
-
-So in JSON terms, it would translate to two conditions: "Number of groups" and "Result equals 10."
-
-Wait, but actually, when I look at their sample output, they had "Number of groups" and "Result equals 10." So maybe that's how I should structure mine as well.
-
-So in summary, the problem says there are 10 groups because dividing 90 by 9 gives 10. Therefore, each condition is a separate statement: one about the number of groups being 10 and another about the division result being 10.
+The response received a score of 7 out of 10, which falls into the 9-8 category because it's thorough yet not overly sophisticated. It addresses the task well with clear references and appropriate use of literary techniques without overcomplicating.
 </think>
 
-{"conditions": ["Number of groups", "Result equals 10"]}
+```json
+{
+    "thought_process": "The student's response is evaluated based on their analysis of the passage and their ability to link literary techniques to the impact on the character. The essay demonstrates a reasonable thesis but lacks depth in specific references or technical precision, showing some misinterpretation. The writing is characterized by weak diction, syntax, grammar, or organization.",
+    "action_taken": "Deduct marks",
+    "response": "The response received a score of 7 out of 10 based on the analysis of literary techniques and their connection to character impact.",
+    "final_adjusted_score": 7
+}
+```
 
 --- Cleaned LLM Response ---
-{"conditions": ["Number of groups", "Result equals 10"]}
+```json
+{
+    "thought_process": "The student's response is evaluated based on their analysis of the passage and their ability to link literary techniques to the impact on the character. The essay demonstrates a reasonable thesis but lacks depth in specific references or technical precision, showing some misinterpretation. The writing is characterized by weak diction, syntax, grammar, or organization.",
+    "action_taken": "Deduct marks",
+    "response": "The response received a score of 7 out of 10 based on the analysis of literary techniques and their connection to character impact.",
+    "final_adjusted_score": 7
+}
+```
 
---- Reconstructed Conditions ---
-['Number of groups', 'Result equals 10']
+--- Evaluation Result ---
+thought_process="The student's response is evaluated based on their analysis of the passage and their ability to link literary techniques to the impact on the character. The essay demonstrates a reasonable thesis but lacks depth in specific references or technical precision, showing some misinterpretation. The writing is characterized by weak diction, syntax, grammar, or organization." action_taken='Deduct marks' response='The response received a score of 7 out of 10 based on the analysis of literary techniques and their connection to character impact.' final_adjusted_score=7.0
+
+--- Target-Guided Dialogue Completed ---
+thought_process="The student's response is evaluated based on their analysis of the passage and their ability to link literary techniques to the impact on the character. The essay demonstrates a reasonable thesis but lacks depth in specific references or technical precision, showing some misinterpretation. The writing is characterized by weak diction, syntax, grammar, or organization." action_taken='Deduct marks' response='The response received a score of 7 out of 10 based on the analysis of literary techniques and their connection to character impact.' final_adjusted_score=7.0
+--- thematic_sim:  Not Calculated
+--- tfidf_sim:  Not Calculated
+
+--- Running Non-Collaborative Dialogue Evaluation ---
+
+--- Raw LLM Response ---
+<think>
+Alright, let's break down this problem. The user provided a detailed rubric and an essay score of 9-8. They want me to evaluate the essay based on the rubric and adjust the score accordingly.
+
+First, I'll look at the rubric sections: Task Background (D), Conversation History (C), Available Actions (A), Scoring Guidelines, Response Format, and the example schema. The key here is understanding each part of the rubric.
+
+The essay in question has a 9-8 score. That means it's well-written with strong analysis but maybe misses some depth or detail. I need to see if there are any areas where the essay could improve according to the rubric.
+
+Looking at the rubric, under Task Background (D), they scored 9. The essay provides context and links literary techniques effectively, so that part is solid.
+
+In Conversation History (C), it's empty because there was no prior conversation. So nothing to consider here.
+
+Available Actions are 'Deduct marks' or 'Add marks'. Since the score is already high, I might not need to deduct but could consider if any improvements were missed.
+
+Scoring Guidelines mention adding 1 point for Task Background and 2 points for literary technique. The essay has both well, so perhaps no deductions here.
+
+The response format requires a JSON structure with thought process, action taken, response, and final score. Since the essay is already good, maybe I should add a comment on possible areas for improvement without deducting points.
+
+I'll consider if there's anything missing in the analysis—maybe more depth or specific examples could enhance it. But since the rubric allows 9-8, perhaps adding a small comment would be beneficial without affecting the score.
+</think>
+
+```json
+{
+    "thought_process": "The essay received an excellent score of 9-8, indicating strong understanding and analysis. However, to align with higher standards, incorporating more specific literary references or deeper thematic connections could enhance its depth.",
+    "action_taken": "Add marks",
+    "response": "While the essay is well-written and demonstrates thorough understanding, adding a brief critique of possible improvements would provide constructive feedback without affecting the score.",
+    "final_adjusted_score": 8.5
+}
+```
+
+--- Cleaned LLM Response ---
+```json
+{
+    "thought_process": "The essay received an excellent score of 9-8, indicating strong understanding and analysis. However, to align with higher standards, incorporating more specific literary references or deeper thematic connections could enhance its depth.",
+    "action_taken": "Add marks",
+    "response": "While the essay is well-written and demonstrates thorough understanding, adding a brief critique of possible improvements would provide constructive feedback without affecting the score.",
+    "final_adjusted_score": 8.5
+}
+```
+
+--- Evaluation Result ---
+thought_process='The essay received an excellent score of 9-8, indicating strong understanding and analysis. However, to align with higher standards, incorporating more specific literary references or deeper thematic connections could enhance its depth.' action_taken='Add marks' response='While the essay is well-written and demonstrates thorough understanding, adding a brief critique of possible improvements would provide constructive feedback without affecting the score.' final_adjusted_score=8.5
+
+--- Non-Collaborative Dialogue Completed ---
+thought_process='The essay received an excellent score of 9-8, indicating strong understanding and analysis. However, to align with higher standards, incorporating more specific literary references or deeper thematic connections could enhance its depth.' action_taken='Add marks' response='While the essay is well-written and demonstrates thorough understanding, adding a brief critique of possible improvements would provide constructive feedback without affecting the score.' final_adjusted_score=8.5
+
+--- Final Evaluation Summary ---
+Total Score: 7.5

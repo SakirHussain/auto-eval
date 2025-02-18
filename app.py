@@ -37,7 +37,7 @@ def create_vector_store(corpus_path):
     for i, doc in enumerate(docs):
         print(f"Chunk {i+1}: {doc.page_content}\n")
     
-    embeddings = OpenAIEmbeddings(api_key="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")  # TRY TO USE DIFFERENT MODEL HERE
+    embeddings = OpenAIEmbeddings(api_key="")  # TRY TO USE DIFFERENT MODEL HERE
     vector_store = FAISS.from_documents(docs, embeddings)
     return vector_store
 
