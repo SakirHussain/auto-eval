@@ -27,6 +27,9 @@ def load_and_clean_corpus(file_path):
     loader = PyPDFLoader(file_path)
     documents = loader.load()
     cleaned_documents = [clean_text(doc.page_content) for doc in documents]
+    print("\n--- Cleaned Documents ---")
+    for doc in cleaned_documents:
+        print(doc[:500], "\n--- Document End ---\n")
     return cleaned_documents
 
 def create_vector_store(corpus_path):
@@ -34,13 +37,31 @@ def create_vector_store(corpus_path):
     documents = load_and_clean_corpus(corpus_path)
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100, separators=["\n\n", ".", " "])
     docs = text_splitter.create_documents(documents)
+    
+    # Add metadata for tracking sections (optional)
+    for i, doc in enumerate(docs):
+        doc.metadata = {"chunk_id": i + 1}
+
+    # Debug: Print each chunk to verify splitting
+    print("\n--- Document Chunks ---")
+    for doc in docs:
+        print(f"Chunk ID: {doc.metadata['chunk_id']}\nContent: {doc.page_content}\n")
+    
     embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
     return FAISS.from_documents(docs, embeddings)
 
 def retrieve_relevant_docs(question, vector_store):
     """Retrieve the top relevant documents from the vector store."""
     relevant_docs = vector_store.similarity_search(question, k=5)
-    return relevant_docs[:3]
+    
+    filtered_docs = [doc for doc in relevant_docs if len(doc.page_content) > 100]
+    
+    # Debug: Print retrieved chunks
+    print("\n--- Retrieved Chunks ---")
+    for doc in filtered_docs:
+        print(f"Retrieved Chunk: {doc.page_content}\n")
+    
+    return filtered_docs[:3]
 
 # Step 3: Define the RAG Chain with CoT for Answer Generation in Paragraph Format
 def rag_generate(question, rubric, corpus_path):
@@ -50,33 +71,48 @@ def rag_generate(question, rubric, corpus_path):
     context = "\n\n".join([doc.page_content for doc in relevant_docs])
     
     prompt_template = PromptTemplate(
-        template="""
-        You are an AI assistant generating a detailed, structured answer based on retrieved knowledge. 
-        Use a Chain-of-Thought (CoT) approach to reason through the question and extract key insights.
-        
-        Ensure the answer adheres to the following rubric, covering all required topics with the given weightage:
-        
-        <rubric>
-        {rubric}
-        </rubric>
-        
-        <question>
-        {question}
-        </question>
-        
-        <context>
-        {context}
-        </context>
-        
-        Generate a detailed and descriptive answer in paragraph format. 
-        The answer should include all required elements from the rubric and must be well-structured.
-        The output should ONLY contain the generated answer as a full text paragraph without any additional formatting, labels, or explanations.
-        """,
-        input_variables=["question", "context", "rubric"]
-    )
+    template="""
+    You are a college professor tasked with generating a structured and comprehensive answer for a given question taking help from the retrieved knowledge.  
+    Your response must strictly adhere to the provided rubric and reasoning framework. The answe will be worth 10 marks in total so the answer must be 500 words long.
+
+    Task Overview
+    - Use Chain-of-Thought (CoT) reasoning to analyze the question step by step.
+    - Extract key insights from the provided context.
+    - Construct a well-structured, paragraph-based answer that directly satisfies the rubric criteria.
+
+    Evaluation Rubric
+    The generated answer must fully cover the following required topics with their assigned weightage:
+
+    <rubric>
+    {rubric}
+    </rubric>
+
+    <question>
+    {question}
+    </question>
+
+    Retrieved Context
+    The following context has been retrieved from reliable sources.  
+    Use this information to construct an accurate and detailed response to the given question:
+
+    <context>
+    {context}
+    </context>
+
+    Response Generation Guidelines
+    - The response must be a fully detailed and structured answer.  
+    - DO NOT include any explanations, formatting, labels, or extra text—only generate the answer.  
+    - The output should be a cohesive, well-written paragraph addressing all rubric points.  
+
+    """,
+    input_variables=["question", "context", "rubric"]
+)
+
     
     chain = prompt_template | model
     llm_response = chain.invoke({"question": question, "context": context, "rubric": rubric})
+    
+    print(f"\n--- Raw LLM Response ---\n{llm_response}")
     
     # Remove <think> tags before returning the final response
     cleaned_response = remove_think_tags(llm_response)
