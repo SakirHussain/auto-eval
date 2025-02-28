@@ -73,7 +73,8 @@ def rag_generate(question, rubric, corpus_path):
     prompt_template = PromptTemplate(
     template="""
     You are a college professor tasked with generating a structured and comprehensive answer for a given question taking help from the retrieved knowledge.  
-    Your response must strictly adhere to the provided rubric and reasoning framework. The answe will be worth 10 marks in total so the answer must be 500 words long.
+    Your response must strictly adhere to the provided rubric and reasoning framework. 
+    The answer will be worth 10 marks in total so the answer MUST BE 500 WORDS OR MORE.
 
     Task Overview
     - Use Chain-of-Thought (CoT) reasoning to analyze the question step by step.

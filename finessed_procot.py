@@ -181,17 +181,15 @@ def evaluate_dialogue(dialogue_type, dialogue_desc, question, student_answer, id
 # Run Evaluation
 if __name__ == "__main__":
     question = """
-    Compare and contrast perception model and sensor model
-
+    Compare and contrast perception model and sensor model.
     """
     student_answer = """
     The Perception Model is designed to convert sensor data into an understanding of the environmental state. It interprets sensor inputs to infer meaning by handling transformations necessary for invariant object recognition. This model focuses on processing data through various representations, such as feature space and predicates, to achieve recognition invariance. By transforming raw sensor inputs into meaningful insights, the perception model enables intelligent decision-making in various applications.
 
-In contrast, the Sensor Model primarily captures and records raw sensor data without interpretation. Its main functionality is to collect and store sensor inputs directly, preserving them for further processing or storage. Unlike the perception model, which processes data to extract meaning, the sensor model serves as the foundational layer, ensuring that raw data is available for subsequent analysis and interpretation.
+    In contrast, the Sensor Model primarily captures and records raw sensor data without interpretation. Its main functionality is to collect and store sensor inputs directly, preserving them for further processing or storage. Unlike the perception model, which processes data to extract meaning, the sensor model serves as the foundational layer, ensuring that raw data is available for subsequent analysis and interpretation.
     """
     ideal_answer ="""
-    The Perception Model determines the state of the system based on sensor inputs. It processes raw sensory data (e.g., camera images, LiDAR readings, or touch sensors) and converts them into meaningful information about the robot’s environment and internal state. For Example - A self-driving car uses camera and LiDAR data to identify objects such as pedestrians and vehicles. The perception model processes these inputs to estimate the car’s surroundings and potential obstacles. The Sensor Model is the inverse of the Perception Model. Given a known system state, it predicts what the sensor readings should be. This is useful in localization, state estimation, and sensor fusion techniques. For Example - In robot localization, if the robot's position in a mapped environment is known, the sensor model can predict what the LiDAR or camera should detect from that location. 
-
+    The Perception Model determines the state of the system based on sensor inputs. It processes raw sensory data (e.g., camera images, LiDAR readings, or touch sensors) and converts them into meaningful information about the robot’s environment and internal state. For Example - A self-driving car uses camera and LiDAR data to identify objects such as pedestrians and vehicles. The perception model processes these inputs to estimate the car’s surroundings and potential obstacles. The Sensor Model is the inverse of the Perception Model. Given a known system state, it predicts what the sensor readings should be. This is useful in localization, state estimation, and sensor fusion techniques. For Example - In robot localization, if the robot's position in a mapped environment is known, the sensor model can predict what the LiDAR or camera should detect from that location.
     """
     rubric = """Explanation of Perception Model (2 marks)\nExplanation of Sensor Model (2 marks)\nReal world Example of Perception Model (3 marks)\nReal world Example of Sensor Model (3 marks)
     """
