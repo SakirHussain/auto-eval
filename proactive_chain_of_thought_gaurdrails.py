@@ -1,35 +1,30 @@
-import re
-import spacy
-from pydantic import BaseModel, Field
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
-# For thematics & TF-IDF
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+from sentence_transformers import SentenceTransformer
 
-# For your LLM calls (DeepSeek R1 with LangChain)
 from langchain_ollama import OllamaLLM
-
-# Guardrails
 from guardrails import Guard
 from langchain.prompts import PromptTemplate
 
+# Import the filtering function
+from student_answer_noncollab_filtering import filter_irrelevant_content
 
-
-nlp = spacy.load("en_core_web_md")
+sbert_model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+model = OllamaLLM(model="deepseek-r1:7b", temperature=0)
 
 def compute_thematic_similarity(student_answer: str, ideal_answer: str):
     """Computes thematic similarity between student answer and ideal answer using Spacy embeddings."""
-    student_doc = nlp(student_answer)
-    ideal_doc = nlp(ideal_answer)
-    return student_doc.similarity(ideal_doc)
+    text_emb = sbert_model.encode([student_answer], convert_to_numpy=True)[0]
+    q_emb = sbert_model.encode([ideal_answer], convert_to_numpy=True)[0]
+    return float(cosine_similarity(text_emb.reshape(1, -1), q_emb.reshape(1, -1))[0][0])
 
 def compute_tfidf_similarity(student_answer: str, ideal_answer: str):
     """Computes TF-IDF similarity between student answer and ideal answer."""
     vectorizer = TfidfVectorizer()
-    vectors = vectorizer.fit_transform([student_answer, ideal_answer])
-    return cosine_similarity(vectors)[0, 1]
-
+    tfidf_matrix = vectorizer.fit_transform([student_answer, ideal_answer])
+    return float(cosine_similarity(tfidf_matrix[0], tfidf_matrix[1])[0][0])
 
 PROCOT_RAIL = """
 <rail version="0.1">
@@ -58,11 +53,7 @@ PROCOT_RAIL = """
 </rail>
 """
 
-
-
 guard = Guard.from_rail_string(PROCOT_RAIL)
-model = OllamaLLM(model="deepseek-r1:7b", temperature=0.4)
-
 
 def guarded_llm_invoke(prompt: str, debug_label: str) -> Optional[Dict[str, Any]]:
     raw_llm_output = model.invoke(prompt)
@@ -78,13 +69,10 @@ def guarded_llm_invoke(prompt: str, debug_label: str) -> Optional[Dict[str, Any]
         outcome = guard.parse(llm_output=raw_llm_output, messages=messages)
         print(f"\n[VALIDATED JSON - {debug_label}]")
         print(outcome.validated_output)  # Show the dict part only
-
         return outcome.validated_output  # <--- Return the dict
     except Exception as e:
         print(f"\nGuardrails failed to parse JSON for {debug_label}: {e}")
         return None
-
-
 
 def generate_structured_eval(
     dialogue_type: str,
@@ -101,19 +89,18 @@ def generate_structured_eval(
     enforced by Guardrails.
     """
 
-    thematic_sim = "Not Calculated"
-    tfidf_sim = "Not Calculated"
-    if dialogue_type == "Target-Guided Dialogue":
-        thematic_sim = compute_thematic_similarity(student_answer, ideal_answer)
-        tfidf_sim = compute_tfidf_similarity(student_answer, ideal_answer)
+    # If using these similarities only for target-guided, you can conditionally compute them:
+    thematic_sim = compute_thematic_similarity(student_answer, ideal_answer) if dialogue_type == "Target-Guided Dialogue" else "N/A"
+    tfidf_sim = compute_tfidf_similarity(student_answer, ideal_answer) if dialogue_type == "Target-Guided Dialogue" else "N/A"
 
     prompt_template = PromptTemplate(
         template="""
-        You are a professor evaluating a student's answer. Your task is to fairly evaluate the student's response based on the provided rubric while ensuring strict adherence to grading criteria.
+        You are a professor evaluating a student's answer. 
+        Your task is to fairly grade the student's answer and see if the given rubric is answered/met within the answer or not.
 
         Context and Role:
         - You are responsible for grading fairly and consistently based on the rubric provided.
-        - Max Marks Possible: 10
+        - Assign a final_adjusted_score between 0 and 1, where 1 means full credit and 0 means no credit.
         - No assumptions should be made — your evaluation should strictly follow the rubric.
         - Your evaluation method is {dialogue_type}, described below:
 
@@ -131,7 +118,6 @@ def generate_structured_eval(
 
         Evaluation Framework (Proactive Chain of Thought)
         You must strictly follow the ProCoT framework to ensure structured grading.
-        - D (Task Background): "You are a teacher grading a student's answer based on the rubric."
         - C (Conversation History): "{conversation_history}"
         - A (Available Actions): {available_actions}
 
@@ -139,8 +125,7 @@ def generate_structured_eval(
         - Any addition or deduction of marks must be explicitly based on whether the rubric is satisfied.
         - Do not assume or add any external information—only infer from the provided inputs.
 
-        Response Format (Strict JSON)
-        Only return valid JSON in the exact structure below:
+        Response Format (Strict JSON) :
         ```json
         {{
             "evaluation_method": "How are you choosing to evaluate this answer? Explain the method.",
@@ -179,14 +164,118 @@ def generate_structured_eval(
         tfidf_sim=tfidf_sim
     )
 
-    # We do NOT print the prompt. If you want to see it for debugging, uncomment this:
-    # print(f"\n--- Prompt for {dialogue_type} ---\n{formatted_prompt}\n")
-
     validated_json = guarded_llm_invoke(formatted_prompt, debug_label=dialogue_type)
     return validated_json
 
+
+def evaluate_answer_by_rubric_items(
+    question: str,
+    student_answer: str,
+    ideal_answer: str,
+    rubric_items: List[str]
+):
+    """
+    Evaluates a student's answer *per rubric item*.
+    1. First filters the answer to remove irrelevant content.
+    2. For each rubric item, runs Clarification Dialogue & Target-Guided Dialogue.
+    3. Averages those two scores to get the item score.
+    4. Sums all item scores to get the final total.
+    
+    Returns a structure containing item-by-item details and final total score.
+    """
+
+    print("\n--- Starting Per-Rubric-Item Evaluation ---")
+    # 1) Filter the student answer once
+    filtered_student_answer = filter_irrelevant_content(student_answer, question)
+
+    # 2) Common definitions for the dialogues
+    conversation_history = ""
+    clarification_actions = ["Deduct marks", "Add marks"]
+    target_guided_actions = ["Deduct marks", "Add marks"]
+
+    clarification_desc = '''
+    - Identify missing, unclear, or ambiguous details in the student's answer.
+    - Deduct marks based on missing information.
+    - Explain why marks were deducted.
+    '''
+
+    target_guided_desc = '''
+    - Determine how many transformations (steps or turns) are needed to thematically convert the student's answer into the ideal answer.
+    - Deduct marks based on the necessary transformations.
+    - Thematic and TF-IDF similarity are provided.
+    '''
+
+    results_by_item = []
+    total_score = 0.0
+
+    # 3) Evaluate each rubric item separately
+    for idx, rubric_item in enumerate(rubric_items, start=1):
+        print(f"\n--- Evaluating Rubric Item #{idx}: {rubric_item} ---")
+
+        # Clarification Dialogue
+        clar_raw = generate_structured_eval(
+            "Clarification Dialogue",
+            clarification_desc,
+            question,
+            filtered_student_answer,
+            ideal_answer,
+            rubric_item,  # Pass just this rubric's text
+            conversation_history,
+            clarification_actions
+        )
+
+        # Target-Guided Dialogue
+        target_raw = generate_structured_eval(
+            "Target-Guided Dialogue",
+            target_guided_desc,
+            question,
+            filtered_student_answer,
+            ideal_answer,
+            rubric_item,
+            conversation_history,
+            target_guided_actions
+        )
+
+        # Extract numeric scores
+        if clar_raw and "final_adjusted_score" in clar_raw:
+            clar_score = float(clar_raw["final_adjusted_score"])
+        else:
+            clar_score = 0.0
+
+        if target_raw and "final_adjusted_score" in target_raw:
+            target_score = float(target_raw["final_adjusted_score"])
+        else:
+            target_score = 0.0
+
+        # Average the two
+        item_score = (clar_score + target_score) / 2.0
+        total_score += item_score
+
+        # Store details
+        results_by_item.append({
+            "rubric_item": rubric_item,
+            "clarification_score": clar_score,
+            "target_guided_score": target_score,
+            "item_score": item_score,
+            "clarification_json": clar_raw,
+            "target_guided_json": target_raw
+        })
+
+    # 4) Summarize
+    evaluation_result = {
+        "scores_by_item": results_by_item,
+        "total_score": total_score
+    }
+
+    return evaluation_result
+
+
+# (Optional) Keep the older "evaluate_answer" if you still need it
 def evaluate_answer(question, student_answer, ideal_answer, rubric):
-    print("\n--- Starting Evaluation ---")
+    """
+    Original single-shot approach for reference.
+    """
+    print("\n--- Starting Evaluation (Legacy) ---")
     print(f"Question: {question}")
     print(f"Student Answer: {student_answer}")
     print(f"Ideal Answer: {ideal_answer}")
@@ -195,7 +284,6 @@ def evaluate_answer(question, student_answer, ideal_answer, rubric):
     conversation_history = ""
     clarification_actions = ["Deduct marks", "Add marks"]
     target_guided_actions = ["Deduct marks", "Add marks"]
-    non_collab_actions = ["Deduct marks", "Add marks"]
     
     clarification_desc = '''
     - Identify missing, unclear, or ambiguous details in the student's answer.
@@ -208,13 +296,11 @@ def evaluate_answer(question, student_answer, ideal_answer, rubric):
     - Deduct marks based on the necessary transformations.
     - Thematic and TF-IDF similarity are provided.
     '''
-    
-    non_collab_desc = '''
-    - Detect if the student's answer is off-topic, vague, or irrelevant.
-    - Deduct marks accordingly and list issues.
-    '''
 
-    # --- Clarification Dialogue ---
+    # non collab preprocessing 
+    student_answer = filter_irrelevant_content(student_answer, question)
+    
+    # Clarification Dialogue
     clar_raw = generate_structured_eval(
         "Clarification Dialogue",
         clarification_desc,
@@ -226,7 +312,7 @@ def evaluate_answer(question, student_answer, ideal_answer, rubric):
         clarification_actions
     )
 
-    # --- Target-Guided Dialogue ---
+    # Target-Guided Dialogue
     target_raw = generate_structured_eval(
         "Target-Guided Dialogue",
         target_guided_desc,
@@ -238,39 +324,18 @@ def evaluate_answer(question, student_answer, ideal_answer, rubric):
         target_guided_actions
     )
 
-    # --- Non-Collaborative Dialogue ---
-    non_collab_raw = generate_structured_eval(
-        "Non-Collaborative Dialogue",
-        non_collab_desc,
-        question,
-        student_answer,
-        ideal_answer,
-        rubric,
-        conversation_history,
-        non_collab_actions
-    )
-
-    # Convert them safely to floats in case the LLM does weird things
     clar_score = float(clar_raw["final_adjusted_score"]) if clar_raw and "final_adjusted_score" in clar_raw else 0.0
     target_score = float(target_raw["final_adjusted_score"]) if target_raw and "final_adjusted_score" in target_raw else 0.0
-    non_collab_score = float(non_collab_raw["final_adjusted_score"]) if non_collab_raw and "final_adjusted_score" in non_collab_raw else 0.0
 
-    # total_adjusted_score = clar_score + target_score + non_collab_score
-    # If you truly want an average out of the 3:
-    total_adjusted_score = (clar_score + target_score + non_collab_score) / 3.0
+    total_adjusted_score = (clar_score + target_score) / 2.0
 
     print("\n--- Final Evaluation Summary ---")
     print(f"Clarification Score:   {clar_score}")
     print(f"Target-Guided Score:   {target_score}")
-    print(f"Non-Collab Score:      {non_collab_score}")
     print(f"Total Combined Score:  {total_adjusted_score:.2f}")
 
-    # Or if you want to do an average, you can do:
-    # final_average = total_adjusted_score / 3.0
-    # print(f"Overall Average: {final_average:.2f}")
-
     feedbacks = []
-    for res in [clar_raw, target_raw, non_collab_raw]:
+    for res in [clar_raw, target_raw]:
         if res and "response" in res:
             feedbacks.append(res["response"])
 
@@ -311,22 +376,19 @@ if __name__ == "__main__":
     (b) eXtreme Programming (XP) supports the mobile app’s development by enabling frequent small releases, making it easier to adapt to changing policies and budget constraints. XP’s customer-centric approach keeps stakeholders and user representatives deeply involved, ensuring continuous feedback on newly added features (e.g., bike-sharing modules or ride-hailing integration). Pair programming enhances code quality and knowledge sharing, while test-driven development ensures stable, maintainable code that can accommodate quick, incremental changes. Through continuous integration and periodic refactoring, XP keeps the system robust, allowing new components such as payment gateways or real-time alerts to be integrated without destabilizing the application.
     '''
 
-    rubric = '''
-    Part (a)
-    1. Understanding of Agile Principles - Demonstrates knowledge of Agile philosophy, especially iterative development, frequent feedback, and flexibility in requirements. (1 Mark)
-    2. Incremental Feature Rollout - Explains how the app will be developed in modular increments (e.g., starting with essential features, then adding real-time updates).(1 Mark)
-    3. Customer/Stakeholder Involvement - Describes how feedback will be gathered from users (e.g., beta testers, select groups of citizens) and incorporated into each iteration.(1 Mark)
-    4. Sprint/Iteration Structure -	Outlines how sprints are organized, how tasks are prioritized, and how progress is evaluated at the end of each sprint.(1 Mark)
-    5. Practical Application - Provides a clear plan linking specific modules (transport info, bike-sharing, ride-hailing) to Agile principles and shows feasibility.(1 Mark)
+    rubric_items = [
+        "Understanding of Agile Principles (1 Mark)",
+        "Incremental Feature Rollout (1 Mark)",
+        "Customer/Stakeholder Involvement (1 Mark)",
+        "Sprint/Iteration Structure (1 Mark)",
+        "Practical Application (1 Mark)",
+        "Understanding of XP Principles (1 Mark)",
+        "Alignment with Project Requirements (1 Mark)",
+        "Customer Collaboration in XP (1 Mark)",
+        "Development Practices (1 Mark)",
+        "Testing & Continuous Improvement (1 Mark)"
+    ]
 
-    Part (b)
-    1. Understanding of XP Principles -	Demonstrates knowledge of XP’s core tenets (rapid releases, pair programming, test-driven development, refactoring, continuous integration, etc.). (1 Mark)
-    2. Alignment with Project Requirements - Explains how XP supports quick releases, evolving requirements, and user-centric development for the mobility application.	(1 Mark)
-    3. Customer Collaboration -	Addresses how XP’s customer involvement, frequent feedback loops, and user stories help refine and validate features (e.g., UI reviews, real-time feedback). (1 Mark)
-    4. Development Practices - Shows understanding of XP methods (pair programming, small releases, simple design) in the context of the planned modules (bike-sharing, ride-hailing). (1 Mark)
-    5. Testing & Continuous Improvement - Describes how continuous testing, rapid iteration, and refactoring maintain code quality and adapt the app to changing policies.	(1 Mark)
-    '''
-
-    result = evaluate_answer(question, student_answer, ideal_answer, rubric)
+    result = evaluate_answer_by_rubric_items(question, student_answer, ideal_answer, rubric_items)
     print("\n--- Final Result Dictionary ---")
     print(result)
