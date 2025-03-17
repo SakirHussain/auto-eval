@@ -1,114 +1,150 @@
 import json
+from typing import Optional, Dict, Any, List
+
 from langchain_ollama import OllamaLLM
 from langchain.prompts import PromptTemplate
 from guardrails import Guard
-from rake_nltk import Rake
-import nltk
 
-# Ensure NLTK stopwords are downloaded (if not already)
-nltk.download('stopwords', quiet=True)
-
-# Define the Guardrails rail string to enforce a list output.
-RAIL_STRING = """
+# Define a Guardrails rail string for rubric generation.
+# The expected output is a JSON object with a "rubrics" key whose value is a list of strings.
+RUBRIC_GEN_RAIL = """
 <rail version="0.1">
 <output>
-  <list name="rubrics" description="List of rubric criteria for grading student answers">
-    <string description="A clear, concise rubric criterion statement ending with (1 Mark)" />
-  </list>
+  <object>
+    <property name="rubrics" type="array" description="A list of rubric criteria for grading student answers. Each criterion must be a clear, concise sentence ending with (1 Mark)">
+      <items type="string" />
+    </property>
+    <required name="rubrics"/>
+  </object>
 </output>
 </rail>
 """
 
 # Initialize Guardrails with the rail string.
-guard = Guard.from_rail_string(RAIL_STRING)
+guard = Guard.from_rail_string(RUBRIC_GEN_RAIL)
 
-# Initialize the Mistral-7B model on Ollama.
-model = OllamaLLM(model="mistral-7b", temperature=0.4)
+# Initialize the Mistral model on Ollama.
+model = OllamaLLM(model="mistral", temperature=0.4)
 
-def extract_key_phrases(text: str) -> list:
+def guarded_llm_invoke(prompt: str, debug_label: str) -> Optional[Dict[str, Any]]:
     """
-    Use RAKE to extract key phrases from the text.
-    Returns a list of key phrases.
+    Invokes the LLM with the provided prompt and validates its output using Guardrails.
+    The expected JSON must contain a "rubrics" key with a list of rubric item strings.
     """
-    rake_extractor = Rake()
-    rake_extractor.extract_keywords_from_text(text)
-    key_phrases = rake_extractor.get_ranked_phrases()
-    # Return top 5 key phrases for brevity (adjust as needed)
-    return key_phrases[:5]
-
-def generate_rubric(question: str, ideal_answer: str):
-    """
-    Generate a list of rubric items for a given question and ideal answer.
-    Steps:
-      1. Extract key phrases from the ideal answer.
-      2. Create a structured prompt including these key phrases.
-      3. Use Mistral-7B to generate rubric items.
-      4. Validate the output with Guardrails.ai.
-    """
-    key_phrases = extract_key_phrases(ideal_answer)
-    # Construct the key points string for the prompt.
-    key_points_str = ", ".join(key_phrases)
-    
-    # Create the prompt.
-    prompt = f"""
-    You are an AI assistant tasked with creating clear, concise rubric criteria for grading student answers.
-    Given the following question and its ideal answer, generate a list of rubric items.
-    Each rubric item must be a single, clear sentence that describes what a student answer should demonstrate, and must end with "(1 Mark)".
-    Use the key points extracted from the ideal answer: {key_points_str}.
-
-    Question:
-    {question}
-
-    Ideal Answer:
-    {ideal_answer}
-
-    Generate Rubrics:
-    """
-    # Invoke the model to generate rubric items.
-    response = model.invoke(prompt)
-    # Print raw response for debugging purposes.
-    print("Raw Model Response:\n", response)
-    
-    # Validate and parse the output using Guardrails.
+    raw_llm_output = model.invoke(prompt)
+    print(f"\n[RAW LLM OUTPUT - {debug_label}]\n{raw_llm_output}")
+    messages = [{"role": "user", "content": prompt}]
     try:
-        validated = guard.parse(response)
-        rubric_items = validated.validated_output["rubrics"]
+        outcome = guard.parse(llm_output=raw_llm_output, messages=messages)
+        print(f"\n[VALIDATED JSON - {debug_label}]\n{outcome.validated_output}")
+        return outcome.validated_output
     except Exception as e:
-        print("Guardrails validation failed:", e)
-        rubric_items = []
-    return rubric_items
+        print(f"\nGuardrails failed to parse JSON for {debug_label}: {e}")
+        return None
 
-def load_file_lines(file_path: str):
-    """Load non-empty lines from a file."""
-    with open(file_path, 'r', encoding='utf-8') as f:
-        lines = [line.strip() for line in f if line.strip()]
-    return lines
+def generate_rubrics_for_pair(question: str, ideal_answer: str) -> List[str]:
+    """
+    Generates rubric items for a given question and its ideal answer.
+    The prompt instructs the LLM to produce a JSON object with a "rubrics" key,
+    where each rubric item is a concise criterion ending with "(1 Mark)".
+    
+    Expected Output Format:
+    ```json
+    {
+      "rubrics": [
+        "Understanding of Agile Principles (1 Mark)",
+        "Incremental Feature Rollout (1 Mark)",
+        "Customer/Stakeholder Involvement (1 Mark)",
+        ...
+      ]
+    }
+    ```
+    """
+    prompt_template = PromptTemplate(
+        template="""
+        You are an expert academic evaluator tasked with generating rubric criteria for grading student answers.
+        For the following question and its ideal answer, generate a list of rubric items.
+        Each rubric item must be a single, clear sentence that explains what a student's answer must demonstrate, and must end with "(1 Mark)".
+        
+        IMPORTANT RULES:
+        - The sum of all rubric item marks must be exactly 5 marks.
+        - You DO NOT have to generate 5 rubric items; for example, you can generate 2 items where one is worth 2 marks and the other 3 marks.
+        - Assign marks in parentheses at the end of each rubric item.
+        
+        ### Example:
+            Question:
+            "What is the role of a prototype program in problem solving?"
 
-def main():
-    # Load questions and answers from files.
-    questions = load_file_lines("questions.txt")
-    answers = load_file_lines("answers.txt")
+            Ideal Answer:
+            "A prototype simulates portions of the software product to test and refine designs."
+
+            Generated Rubrics:
+            ```json
+            {{
+              "rubrics": [
+                "Clearly explains that a prototype simulates portions of the software product (2 Marks)",
+                "Identifies prototyping as a way to test and refine designs before implementation (3 Marks)"
+              ]
+            }}
+        ### End of Example
+
+        Question:
+        {question}
+
+        Ideal Answer:
+        {ideal_answer}
+
+        Generate Rubrics:
+
+        Expected Output Format:
+        ```json
+        {{
+         "rubrics": [
+            "Clearly explains that a prototype simulates portions of the software product (2 Marks)",
+            "Identifies prototyping as a way to test and refine designs before implementation (3 Marks)"
+          ]
+        }}
+        """, 
+    input_variables=["question", "ideal_answer"] )
+            
+    prompt = prompt_template.format(question=question, ideal_answer=ideal_answer)
+    validated_output = guarded_llm_invoke(prompt, debug_label="Rubric Generation")
+    if validated_output and "rubrics" in validated_output:
+        return validated_output["rubrics"]
+    else:
+        return []
+
+def load_file_lines(file_path: str) -> List[str]: 
+    """Loads non-empty lines from a file."""
+    with open(file_path, "r", encoding="utf-8") as f: 
+        return [line.strip() for line in f if line.strip()]
+
+def main(): 
+    # Load questions and ideal answers from text files. 
+    questions = load_file_lines("questions.txt") 
+    ideal_answers = load_file_lines("answers.txt")
     
-    if len(questions) != len(answers):
-        print("Warning: Number of questions and answers do not match!")
-    
-    rubrics_for_all = {}
-    # Iterate over each question-answer pair.
-    for q, a in zip(questions, answers):
+    if len(questions) != len(ideal_answers):
+        print("Warning: The number of questions and ideal answers do not match!")
+
+    all_rubrics = {}
+
+    for q, ans in zip(questions, ideal_answers):
         print(f"\nGenerating rubrics for Question: {q}")
-        rubric_items = generate_rubric(q, a)
-        rubrics_for_all[q] = rubric_items
+        rubric_items = generate_rubrics_for_pair(q, ans)
+        all_rubrics[q] = rubric_items
         if rubric_items:
             print("Rubric Items:")
             for item in rubric_items:
                 print(" -", item)
         else:
-            print("No valid rubric items generated.")
+            print("No rubric items generated.")
         print("-" * 40)
-    
-    # Optionally, save the generated rubrics to a JSON file.
-    with open("generated_rubrics.json", "w", encoding="utf-8") as out_f:
-        json.dump(rubrics_for_all, out_f, indent=2)
 
-if __name__ == "__main__":
+    # Save the generated rubric items to a JSON file.
+    with open("generated_rubrics_dataset.json", "w", encoding="utf-8") as outfile:
+        json.dump(all_rubrics, outfile, indent=2)
+
+        
+if __name__ == "__main__": 
     main()
