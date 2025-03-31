@@ -10,24 +10,16 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import random
 import numpy as np
+import math
 import json
 
-# -----------------------
-# Step 1: Load merged dataset
-# -----------------------
+
 with open("procot_eval_with_ideal.json", "r") as f:
     data = json.load(f)
 
 df = pd.DataFrame(data)
 
-# -----------------------
-# Step 2: Initialize SBERT model
-# -----------------------
 sbert_model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
-
-# -----------------------
-# Step 3: Feature Functions
-# -----------------------
 def compute_sbert_sim(a, b):
     emb1 = sbert_model.encode([a])[0]
     emb2 = sbert_model.encode([b])[0]
@@ -38,9 +30,7 @@ def compute_tfidf_sim(a, b):
     tfidf = vectorizer.fit_transform([a, b])
     return float(cosine_similarity(tfidf[0], tfidf[1])[0][0])
 
-# -----------------------
-# Step 4: Compute Features
-# -----------------------
+
 print("Computing Features...")
 
 df['human_avg_score'] = df['human_scores'].apply(lambda x: sum(x)/len(x))
@@ -49,9 +39,7 @@ df['answer_length'] = df['student_answer'].apply(lambda x: len(x.split()))
 df['sbert_similarity'] = df.apply(lambda row: compute_sbert_sim(row['student_answer'], row['ideal_answer']), axis=1)
 df['tfidf_similarity'] = df.apply(lambda row: compute_tfidf_sim(row['student_answer'], row['ideal_answer']), axis=1)
 
-# -----------------------
-# Step 5: Train Softener Model
-# -----------------------
+
 X = df[['procot_score', 'sbert_similarity', 'tfidf_similarity', 'answer_length']]
 y = df['human_avg_score']
 
@@ -60,9 +48,7 @@ X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_
 model = GradientBoostingRegressor()
 model.fit(X_train, y_train)
 
-# -----------------------
-# Step 6: Calculate Final Scores for All Rows
-# -----------------------
+
 final_scores = []
 softener_scores = []
 feature_names = ['procot_score', 'sbert_similarity', 'tfidf_similarity', 'answer_length']
@@ -78,6 +64,7 @@ for index, row in df.iterrows():
 
     features = pd.DataFrame(np.array([[procot, sbert, tfidf, length]]), columns=feature_names)
     soft_score = model.predict(features)[0]
+    soft_score = math.ceil(soft_score)
     lambda_ = 0
     final_score = lambda_ * procot + (1 - lambda_) * soft_score
 
@@ -87,9 +74,7 @@ for index, row in df.iterrows():
 df['softener_score'] = softener_scores
 df['final_score'] = final_scores
 
-# -----------------------
-# Step 7: Evaluation Metrics Function
-# -----------------------
+
 def evaluate_scores(name, model_scores):
     human_scores = df['human_avg_score']
     errors = np.abs(human_scores - model_scores)
@@ -119,7 +104,6 @@ def evaluate_scores(name, model_scores):
     # Total Percentage Error
     tpe = (errors.sum() / human_scores.sum()) * 100
 
-    # Print
     print(f"\n{name} Evaluation Metrics")
     print(f" MAE: {mae:.4f}")
     print(f" MSE: {mse:.4f}")
@@ -137,17 +121,10 @@ def evaluate_scores(name, model_scores):
 
     print(f"\n Total Percentage Error: {tpe:.2f}%\n")
 
-# -----------------------
-# Step 8: Print Metrics
-# -----------------------
+
 evaluate_scores("ProCoT", df['procot_score'])
 evaluate_scores("Final Adjusted", df['final_score'])
 
-
-
-# -----------------------
-# Step 9: Visualization
-# -----------------------
 
 plt.figure(figsize=(16, 12))
 
@@ -185,7 +162,6 @@ plt.legend()
 plt.tight_layout()
 plt.show()
 
-# -----------------------
 sample_idx = random.randint(0, len(df)-1)
 
 sample = df.iloc[sample_idx]
