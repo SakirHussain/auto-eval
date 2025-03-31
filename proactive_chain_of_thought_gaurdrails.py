@@ -1,41 +1,38 @@
-import re
-import spacy
-from pydantic import BaseModel, Field
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
-# For thematics & TF-IDF
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+from sentence_transformers import SentenceTransformer
 
-# For your LLM calls (DeepSeek R1 with LangChain)
 from langchain_ollama import OllamaLLM
-
-# Guardrails
 from guardrails import Guard
 from langchain.prompts import PromptTemplate
 
+# Import the filtering function
+from student_answer_noncollab_filtering import filter_irrelevant_content
 
-
-nlp = spacy.load("en_core_web_md")
+sbert_model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+model = OllamaLLM(model="deepseek-r1:7b", temperature=0)
 
 def compute_thematic_similarity(student_answer: str, ideal_answer: str):
     """Computes thematic similarity between student answer and ideal answer using Spacy embeddings."""
-    student_doc = nlp(student_answer)
-    ideal_doc = nlp(ideal_answer)
-    return student_doc.similarity(ideal_doc)
+    text_emb = sbert_model.encode([student_answer], convert_to_numpy=True)[0]
+    q_emb = sbert_model.encode([ideal_answer], convert_to_numpy=True)[0]
+    return float(cosine_similarity(text_emb.reshape(1, -1), q_emb.reshape(1, -1))[0][0])
 
 def compute_tfidf_similarity(student_answer: str, ideal_answer: str):
     """Computes TF-IDF similarity between student answer and ideal answer."""
     vectorizer = TfidfVectorizer()
-    vectors = vectorizer.fit_transform([student_answer, ideal_answer])
-    return cosine_similarity(vectors)[0, 1]
-
+    tfidf_matrix = vectorizer.fit_transform([student_answer, ideal_answer])
+    return float(cosine_similarity(tfidf_matrix[0], tfidf_matrix[1])[0][0])
 
 PROCOT_RAIL = """
 <rail version="0.1">
 
 <output>
   <object>
+    <property name="evaluation_method" type="string"
+      description="Evaluation can be Clarification Dialogue, Target-Guided Dialogue, or Non-Collaborative Dialogue, Choose one based on the prompt and explain why and how"/>
     <property name="thought_process" type="string" 
       description="Reasoning before selecting an action."/>
     <property name="action_taken" type="string" 
@@ -45,6 +42,7 @@ PROCOT_RAIL = """
     <property name="final_adjusted_score" type="number" 
       description="Final adjusted score after refinements."/>
     
+    <required name="evaluation_method"/>
     <required name="thought_process"/>
     <required name="action_taken"/>
     <required name="response"/>
@@ -55,10 +53,7 @@ PROCOT_RAIL = """
 </rail>
 """
 
-
 guard = Guard.from_rail_string(PROCOT_RAIL)
-model = OllamaLLM(model="deepseek-r1:7b", temperature=0.4)
-
 
 def guarded_llm_invoke(prompt: str, debug_label: str) -> Optional[Dict[str, Any]]:
     raw_llm_output = model.invoke(prompt)
@@ -74,13 +69,10 @@ def guarded_llm_invoke(prompt: str, debug_label: str) -> Optional[Dict[str, Any]
         outcome = guard.parse(llm_output=raw_llm_output, messages=messages)
         print(f"\n[VALIDATED JSON - {debug_label}]")
         print(outcome.validated_output)  # Show the dict part only
-
         return outcome.validated_output  # <--- Return the dict
     except Exception as e:
         print(f"\nGuardrails failed to parse JSON for {debug_label}: {e}")
         return None
-
-
 
 def generate_structured_eval(
     dialogue_type: str,
@@ -97,20 +89,19 @@ def generate_structured_eval(
     enforced by Guardrails.
     """
 
-    thematic_sim = "Not Calculated"
-    tfidf_sim = "Not Calculated"
-    if dialogue_type == "Target-Guided Dialogue":
-        thematic_sim = compute_thematic_similarity(student_answer, ideal_answer)
-        tfidf_sim = compute_tfidf_similarity(student_answer, ideal_answer)
+    # If using these similarities only for target-guided, you can conditionally compute them:
+    thematic_sim = compute_thematic_similarity(student_answer, ideal_answer) if dialogue_type == "Target-Guided Dialogue" else "N/A"
+    tfidf_sim = compute_tfidf_similarity(student_answer, ideal_answer) if dialogue_type == "Target-Guided Dialogue" else "N/A"
 
     prompt_template = PromptTemplate(
         template="""
-        You are a professor evaluating a student's answer. Your task is to fairly evaluate the student's response based on the provided rubric while ensuring strict adherence to grading criteria.
+        You are a professor evaluating a student's answer. 
+        Your task is to fairly grade the student's answer and see if the given rubric is answered/met within the answer or not.
 
         Context and Role:
         - You are responsible for grading fairly and consistently based on the rubric provided.
-        - Max Marks Possible: 10
-        - No assumptions should be made**—your evaluation should strictly follow the rubric.
+        - Assign a final_adjusted_score between 0 and 1, where 1 means full credit and 0 means no credit.
+        - No assumptions should be made — your evaluation should strictly follow the rubric.
         - Your evaluation method is {dialogue_type}, described below:
 
         Evaluation Approach:
@@ -127,7 +118,6 @@ def generate_structured_eval(
 
         Evaluation Framework (Proactive Chain of Thought)
         You must strictly follow the ProCoT framework to ensure structured grading.
-        - D (Task Background): "You are a teacher grading a student's answer based on the rubric."
         - C (Conversation History): "{conversation_history}"
         - A (Available Actions): {available_actions}
 
@@ -135,10 +125,10 @@ def generate_structured_eval(
         - Any addition or deduction of marks must be explicitly based on whether the rubric is satisfied.
         - Do not assume or add any external information—only infer from the provided inputs.
 
-        Response Format (Strict JSON)
-        Only return valid JSON in the exact structure below:
+        Response Format (Strict JSON) :
         ```json
         {{
+            "evaluation_method": "How are you choosing to evaluate this answer? Explain the method.",
             "thought_process": "Your reasoning before selecting an action.",
             "action_taken": "Chosen action based on evaluation.",
             "response": "Generated feedback with deductions or awards.",
@@ -174,14 +164,118 @@ def generate_structured_eval(
         tfidf_sim=tfidf_sim
     )
 
-    # We do NOT print the prompt. If you want to see it for debugging, uncomment this:
-    # print(f"\n--- Prompt for {dialogue_type} ---\n{formatted_prompt}\n")
-
     validated_json = guarded_llm_invoke(formatted_prompt, debug_label=dialogue_type)
     return validated_json
 
+
+def evaluate_answer_by_rubric_items(
+    question: str,
+    student_answer: str,
+    ideal_answer: str,
+    rubric_items: List[str]
+):
+    """
+    Evaluates a student's answer *per rubric item*.
+    1. First filters the answer to remove irrelevant content.
+    2. For each rubric item, runs Clarification Dialogue & Target-Guided Dialogue.
+    3. Averages those two scores to get the item score.
+    4. Sums all item scores to get the final total.
+    
+    Returns a structure containing item-by-item details and final total score.
+    """
+
+    print("\n--- Starting Per-Rubric-Item Evaluation ---")
+    # 1) Filter the student answer once
+    filtered_student_answer = filter_irrelevant_content(student_answer, question)
+
+    # 2) Common definitions for the dialogues
+    conversation_history = ""
+    clarification_actions = ["Deduct marks", "Add marks"]
+    target_guided_actions = ["Deduct marks", "Add marks"]
+
+    clarification_desc = '''
+    - Identify missing, unclear, or ambiguous details in the student's answer.
+    - Deduct marks based on missing information.
+    - Explain why marks were deducted.
+    '''
+
+    target_guided_desc = '''
+    - Determine how many transformations (steps or turns) are needed to thematically convert the student's answer into the ideal answer.
+    - Deduct marks based on the necessary transformations.
+    - Thematic and TF-IDF similarity are provided.
+    '''
+
+    results_by_item = []
+    total_score = 0.0
+
+    # 3) Evaluate each rubric item separately
+    for idx, rubric_item in enumerate(rubric_items, start=1):
+        print(f"\n--- Evaluating Rubric Item #{idx}: {rubric_item} ---")
+
+        # Clarification Dialogue
+        clar_raw = generate_structured_eval(
+            "Clarification Dialogue",
+            clarification_desc,
+            question,
+            filtered_student_answer,
+            ideal_answer,
+            rubric_item,  # Pass just this rubric's text
+            conversation_history,
+            clarification_actions
+        )
+
+        # Target-Guided Dialogue
+        target_raw = generate_structured_eval(
+            "Target-Guided Dialogue",
+            target_guided_desc,
+            question,
+            filtered_student_answer,
+            ideal_answer,
+            rubric_item,
+            conversation_history,
+            target_guided_actions
+        )
+
+        # Extract numeric scores
+        if clar_raw and "final_adjusted_score" in clar_raw:
+            clar_score = float(clar_raw["final_adjusted_score"])
+        else:
+            clar_score = 0.0
+
+        if target_raw and "final_adjusted_score" in target_raw:
+            target_score = float(target_raw["final_adjusted_score"])
+        else:
+            target_score = 0.0
+
+        # Average the two
+        item_score = (clar_score + target_score) / 2.0
+        total_score += item_score
+
+        # Store details
+        results_by_item.append({
+            "rubric_item": rubric_item,
+            "clarification_score": clar_score,
+            "target_guided_score": target_score,
+            "item_score": item_score,
+            "clarification_json": clar_raw,
+            "target_guided_json": target_raw
+        })
+
+    # 4) Summarize
+    evaluation_result = {
+        "scores_by_item": results_by_item,
+        "total_score": total_score
+    }
+
+    return evaluation_result
+
+
+# (Optional) Keep the older "evaluate_answer" if you still need it
 def evaluate_answer(question, student_answer, ideal_answer, rubric):
-    print("\n--- Starting Evaluation ---")
+    """
+    Original single-shot approach for reference.
+    """
+    print("\n--- Starting Evaluation (Legacy) ---")
     print(f"Question: {question}")
     print(f"Student Answer: {student_answer}")
     print(f"Ideal Answer: {ideal_answer}")
@@ -190,7 +284,6 @@ def evaluate_answer(question, student_answer, ideal_answer, rubric):
     conversation_history = ""
     clarification_actions = ["Deduct marks", "Add marks"]
     target_guided_actions = ["Deduct marks", "Add marks"]
-    non_collab_actions = ["Deduct marks", "Add marks"]
     
     clarification_desc = '''
     - Identify missing, unclear, or ambiguous details in the student's answer.
@@ -203,13 +296,11 @@ def evaluate_answer(question, student_answer, ideal_answer, rubric):
     - Deduct marks based on the necessary transformations.
     - Thematic and TF-IDF similarity are provided.
     '''
-    
-    non_collab_desc = '''
-    - Detect if the student's answer is off-topic, vague, or irrelevant.
-    - Deduct marks accordingly and list issues.
-    '''
 
-    # --- Clarification Dialogue ---
+    # non collab preprocessing 
+    student_answer = filter_irrelevant_content(student_answer, question)
+    
+    # Clarification Dialogue
     clar_raw = generate_structured_eval(
         "Clarification Dialogue",
         clarification_desc,
@@ -221,7 +312,7 @@ def evaluate_answer(question, student_answer, ideal_answer, rubric):
         clarification_actions
     )
 
-    # --- Target-Guided Dialogue ---
+    # Target-Guided Dialogue
     target_raw = generate_structured_eval(
         "Target-Guided Dialogue",
         target_guided_desc,
@@ -233,39 +324,18 @@ def evaluate_answer(question, student_answer, ideal_answer, rubric):
         target_guided_actions
     )
 
-    # --- Non-Collaborative Dialogue ---
-    non_collab_raw = generate_structured_eval(
-        "Non-Collaborative Dialogue",
-        non_collab_desc,
-        question,
-        student_answer,
-        ideal_answer,
-        rubric,
-        conversation_history,
-        non_collab_actions
-    )
-
-    # Convert them safely to floats in case the LLM does weird things
     clar_score = float(clar_raw["final_adjusted_score"]) if clar_raw and "final_adjusted_score" in clar_raw else 0.0
     target_score = float(target_raw["final_adjusted_score"]) if target_raw and "final_adjusted_score" in target_raw else 0.0
-    non_collab_score = float(non_collab_raw["final_adjusted_score"]) if non_collab_raw and "final_adjusted_score" in non_collab_raw else 0.0
 
-    # total_adjusted_score = clar_score + target_score + non_collab_score
-    # If you truly want an average out of the 3:
-    total_adjusted_score = (clar_score + target_score + non_collab_score) / 3.0
+    total_adjusted_score = (clar_score + target_score) / 2.0
 
     print("\n--- Final Evaluation Summary ---")
     print(f"Clarification Score:   {clar_score}")
     print(f"Target-Guided Score:   {target_score}")
-    print(f"Non-Collab Score:      {non_collab_score}")
     print(f"Total Combined Score:  {total_adjusted_score:.2f}")
 
-    # Or if you want to do an average, you can do:
-    # final_average = total_adjusted_score / 3.0
-    # print(f"Overall Average: {final_average:.2f}")
-
     feedbacks = []
-    for res in [clar_raw, target_raw, non_collab_raw]:
+    for res in [clar_raw, target_raw]:
         if res and "response" in res:
             feedbacks.append(res["response"])
 
@@ -275,120 +345,50 @@ def evaluate_answer(question, student_answer, ideal_answer, rubric):
     }
 
 
-# if __name__ == "__main__":
-#     question = '''
-#     In the following passage from Cormac McCarthyís novel The Crossing (1994), the narrator describes a dramatic experience. Read the passage carefully. Then, in a well-organized essay, show how McCarthyís techniques convey the impact of the experience on the main character. 
-#     By the time he reached the first talus[1] slides under the tall escarpments[2] of the Pilares the dawn was not far to come. He reined the horse in a grassy swale and stood down and dropped the reins. His trousers were stiff with blood. He cradled the wolf in his arms and lowered her to the ground and unfolded the sheet. She was stiff and cold and her fur was bristly with the blood dried upon it. He walked the horse back to the creek and left it standing to water and scouted the banks for wood with which to make a fire. Coyotes were yapping along the hills to the south and they were calling from the dark shapes of the rimlands above him where their cries seemed to have no origin other than the night itself. He got the fire going and lifted the wolf from the sheet and took the sheet to the creek and crouched in the dark and washed the blood out of it and brought it back and he cut forked sticks from a mountain hackberry and drove them into the ground with a rock and hung the sheet on a trestlepole where it steamed in the firelight like a burning scrim standing in a wilder-ness where celebrants of some sacred passion had been carried off by rival sects or perhaps had simply fled in the night at the fear of their own doing. He pulled the blanket about his shoulders and sat shiver-ing in the cold and waiting for the dawn that he could find the place where he would bury the wolf. After a while the horse came up from the creek trailing the wet reins through the leaves and stood at the edge of the fire. He fell asleep with his hands palm up before him like some dozing penitent. When he woke it was still dark. The fire had died to a few low flames seething over the coals. He took off his hat and fanned the fire 1 A sloping mass of rock debris at the base of a cliff 2 Steep slopes with it and coaxed it back and fed the wood heíd gathered. He looked for the horse but could not see it. The coyotes were still calling all along the stone ramparts of the Pilares and it was graying faintly in the east. He squatted over the wolf and touched her fur. He touched the cold and perfect teeth. The eye turned to the fire gave back no light and he closed it with his thumb and sat by her and put his hand upon her bloodied forehead and closed his own eyes that he could see her running in the mountains, running in the starlight where the grass was wet and the sunís coming as yet had not undone the rich matrix of creatures passed in the night before her. Deer and hare and dove and groundvole all richly empaneled on the air for her delight, all nations of the possible world ordained by God of which she was one among and not separate from. Where she ran the cries of the coyotes clapped shut as if a door had closed upon them and all was fear and marvel. He took up her stiff head out of the leaves and held it or he reached to hold what cannot be held, what already ran among the mountains at once terrible and of a great beauty, like flowers that feed on flesh. What blood and bone are made of but can themselves not make on any altar nor by any wound of war. What we may well believe has power to cut and shape and hollow out the dark form of the world surely if wind can, if rain can. But which cannot be held never be held and is no flower but is swift and a huntress and the wind itself is in terror of it and the world cannot lose it.
-#     '''
+if __name__ == "__main__":
+    question = '''
+    The city council plans to develop a mobile app to enhance urban mobility by providing residents with information on public transport, bike-sharing, and ride-hailing options. Due to changing transportation policies and user needs, the app’s requirements are evolving. With a limited budget and the need for a quick release, the council aims to roll out features in phases, starting with essential transport information and later adding real-time updates and payment integration.
+    a. How will you implement the Agile process model for the above scenario ? (5 Marks)
+    b. Discuss how eXtreme Programming (XP) can support the development of the mobile app.(5 Marks)
+    '''
 
-#     student_answer = '''
-#     The passage from The Crossing conveys a sense of awe and mystery, and in doing so, imparts the depths of the man's emotions towards the wolf. The mourning for the wolf is raised to an elegiac level, as the man reflects upon the wolf, "a tone terrible and of a great beauty." Several devices are employed to effectively enhance the tone of reverence and loss, including figurative language, diction, sentence structure, rhythm, and repetition.
+    student_answer = '''
+    Part(a) Agile is philosophy that revolves around agility in software development and customer satisfaction.
+    It involves integrating the customer to be a part of the development team in order to recueve quick feedback and fast implementations.
+    In the case of a mobile application in improve urban mobility, we will rely on building the application in increments. This will require the application to have high modularity.
+    The modules can be as follows : bikesharing, ride hailing, proximity radar, ride selection/scheduling.
+    The bike sharing and ride hailing modules are mainly UI based and can be developed in one sprint. The feedback can be obtained from a select group of citizens or lauch a test application in beta state to all phones.
+    The core logic - proximity radar, to define how close or far awat te application must look for a ride and ride selection is all about selecting a ride for the user without clashing with other users.
+    This is developed in subsequent sprint cycles and can be tested by limited area lauch to citizens to bring out all the runtime errors and bugs.
 
-#     The pace of the passage fluctuates, alternating from short, detached sentences such as "He squatted over the wolf and touched her fur. He touched the cold and perfect teeth," to unusually long sentences, which are connected by conjunctions (mostly "and") and serve to reflect the outpouring of emotions and the blurred response the man is experiencing, as in lines 41-47 ("The eye... before her"). This dichotomy in sentence structure emphasizes the periods where the man is overcome by remembrances and extrapolations.
+    Part(b) eXtreme progreamming relies on maily very fast development and mazimizing customer satisfaction.
+    Since quick release is important along with subsequent rollouts this is a good SDLC model.
+    The plannig is the first phase of the SDLC model. Here the requirements, need not be rigid or well defined or even formally defined. The requirements are communicated roughly and the production can begin. Here a ride application with public transport, bike sharing and ride hailing.
+    Based on this alone, the architecture/software architecture can be obtained.
+    Once the software architecture is defined for the interation, the coding/implementation begins.
+    Coding is usually pair programming. The modules selected such as UI, bikesharing, ride hailing and public transport are developed.
+    Once they are developed, they are tested agasint the member of the team or in this case a public jury/citizen jury is used to check the appeal of the UI.
+    If it is satisfactory, the component is completed and implemented into the application, if not, the feedback is sent as an input for the next iteration and the process is repeated again.
+    '''
 
-#     The figurative language interspersed within the passage is also highly effective, causing an air of mystery, wonder, and respect. This mood is set when the cries of the coyotes are described as "seeming to have no origin other than the night itself." The analogy of the sheet steaming (lines 21-24) enhances the aura of power and sacredness by diction such as "celebrants of some sacred passion" and "burning screen. " This sense of religious power is again by his companion to a "dozing penitante." A sense of the awe-inspiring mixture of terror and beauty is evidenced when the narrator compares the wolf’s soul to "flowers that feed on flesh," introducing an element of both horror and reverence. This highlights how "all was fear and marvel" regarding the wolf.
+    ideal_answer = '''
+    (a) To implement the Agile Process Model for the city council’s mobile app, begin by organizing short development sprints that deliver working increments of the app, starting with basic transport information and then adding features such as real-time updates and payment integration based on evolving requirements. A product backlog should be maintained and continuously reordered to accommodate changing policies and user feedback. Regular sprint reviews and retrospectives involving city council members, transport authorities, and test user groups will keep development aligned with user needs and ensure quick adaptation through rapid feedback loops. This iterative process allows for continuous improvement, with each sprint building on the last to refine functionality and address issues promptly.
+    (b) eXtreme Programming (XP) supports the mobile app’s development by enabling frequent small releases, making it easier to adapt to changing policies and budget constraints. XP’s customer-centric approach keeps stakeholders and user representatives deeply involved, ensuring continuous feedback on newly added features (e.g., bike-sharing modules or ride-hailing integration). Pair programming enhances code quality and knowledge sharing, while test-driven development ensures stable, maintainable code that can accommodate quick, incremental changes. Through continuous integration and periodic refactoring, XP keeps the system robust, allowing new components such as payment gateways or real-time alerts to be integrated without destabilizing the application.
+    '''
 
-#     The repetition of certain phrases and words emphasizes the ideas behind them.
-#     For example, "What we may well believe has power to cut and shape and hollow out of the dark form of the world, surely if wind can, if rain can..." This repetition contained within this sentence really clarifies the point that our beliefs shape our perception.
+    rubric_items = [
+        "Understanding of Agile Principles (1 Mark)",
+        "Incremental Feature Rollout (1 Mark)",
+        "Customer/Stakeholder Involvement (1 Mark)",
+        "Sprint/Iteration Structure (1 Mark)",
+        "Practical Application (1 Mark)",
+        "Understanding of XP Principles (1 Mark)",
+        "Alignment with Project Requirements (1 Mark)",
+        "Customer Collaboration in XP (1 Mark)",
+        "Development Practices (1 Mark)",
+        "Testing & Continuous Improvement (1 Mark)"
+    ]
 
-#     Also, the repetition of "and" throughout the passage, as in lines 15-21, brings a rhythm to the passage while providing a sense of the man not really realizing what he is doing, only going through the motions.
-
-#     The unspecific pronoun "he" actually provides a contrast, where the grief of the man becomes more poignant. The passage metamorphosizes from a more detached account about man's treatment of the body to a touching scene where the man reflects upon the wolf and her spirit.
-
-#     The final passage, and especially the last line, is made more important by the reflections of the man. The last line is particularly emphasized by the complete lack of punctuation, which Conveys the magnitude of the man's loss. His utter grief over losing the wolf is fully revealed to the reader, especially in the last words:
-
-#     "But which cannot be held, never be held, and is no flower but is swift and a huntress, and the wind itself is in terror of it and the world cannot lose it."
-
-#     The importance of the wolf's role in "the possible word ordained by God, of which she was one among and not separate from" is made known to the reader through the man’s thoughts and actions.
-
-#     In doing so, and in the setting (with the sun beginning to faintly gray the east), a mood of respectful reverence and wonderful power is created. The man is shown to be deeply impacted by his experience.
-#     '''
-
-#     ideal_answer = '''
-#     In the dark of the night, it runs swiftly along the mountains, up the slopes, past the creek, faster than the winds.
-
-#     "What is this 'it' that runs so freely after the body is dead and decaying?" It is purely the soul that escapes after death and returns to its home.
-
-#     In the passage from McCarthy’s The Crossing, the soul of the dying wolf leaves the body, and the man carries him to return to his homeland. McCarthy uses imagery and the description of the complete narrative experience to recount the philosophical revelation that the protagonist encounters as he caresses death in the tranquility of nature.
-
-#     An outstanding quality about this narrative is the care with which each imagery is told. One repetitive image is that of dark and light. The narrative begins in the dark, though close to dawn.
-
-#     The coyotes call from the "dark shapes of the lowlands," giving a clear picture of the grandeur of nature in which the narrator now sits.
-
-#     There is also the image of the weak fire out in the cold darkness, a symbol for some hope after death. The fire at first dies; the main character must fan it and relight it, until the dawn sky begins to gray.
-
-#     What the main character experiences at dawn can be called mysticism, a philosophical epiphany, and a new window of understanding.
-
-#     Such a tone of mystery and enigma is created in the final paragraph (lines 40-65) through the change in the style of writing. The narrative here uses long sentences that run continuously like a stream. The sentences begin to lose the ordinary grammatical form that the narrative followed earlier:
-
-#     "What blood and bone are made of but can themselves not make on any altar nor by any wound of war."
-
-#     The narrative leaves its traditional form and begins to build on the image of what is passing by the main character's closed eyes, as the limited or omniscient third-person narrator can do.
-
-#     The passage has religious allusions: "ordained by God", Personification that breathes life into the mountain: "The flowers feed on flesh.", "The wind and rain cut and shape the land." , "The soul runs wildly through this nation."
-
-#     The experience illuminates the power of nature and the strength of the soul to the main character.
-
-#     He, in reaching out "to hold what cannot be held," grasped in the moment the mystery of death and eternity—the enigma that is conveyed through the powerful images in this narrative.
-
-#     '''
-
-#     rubric = '''
-#     Directions:
-#     The score you assign should reflect your judgment of the quality of the essay
-#     as a whole. Reward the writers for what they do well. The score for an
-#     exceptionally well-written essay may be raised by one point from the score
-#     otherwise appropriate. In no case may a poorly written essay be scored higher
-#     than 3.
-
-#     9-8: The writers of these well-constructed essays define the dramatic nature of the experience
-#     described in Cormac McCarthy's passage and ably demonstrate how the author conveys
-#     the impact of the experience upon the main character. Having fashioned a convincing
-#     thesis about the character's reaction to the death of the wolf, these writers support their
-#     assertions by analyzing the use of specific literary techniques (such as point of view,
-#     syntax, imagery, or diction) that prove fundamental to their understanding of McCarthy's
-#     narrative design. They make appropriate references to the text to illustrate their
-#     argument. Although not without flaws, these essays reflect the writer's ability to control
-#     a wide range of the elements of effective writing to provide a keen analysis of a literary
-#     text.
-
-#     7-6: Developing a sound thesis, these writers discuss with clarity and conviction both the
-#     character's response to the death of the wolf and certain techniques used to convey the
-#     impact this experience has upon the main character. These essays may not be entirely
-#     responsive to the rich suggestiveness of the passage or as precise in describing the
-#     dramatic impact of the event. Although they provide specific references to the text, the
-#     analysis is less persuasive and perhaps less sophisticated than papers in the 9-8 range:
-#     they seem less insightful or less controlled, they develop fewer techniques, or their
-#     discussion of details may be more limited. Nonetheless, they confirm the writer's ability
-#     to read literary texts with comprehension and to write with organization and control.
-
-#     5: These essays construct a reasonable if reductive thesis; they attempt to link the author's
-#     literary techniques to the reader's understanding of the impact of the experience on the
-#     main character. However, the discussion may be superficial, pedestrian, and/or lacking in
-#     consistent control. The organization may be ineffective or not fully realized. The
-#     analysis is less developed, less precise, and less convincing than that of upper half
-#     essays; misinterpretations of particular references or illustrations may detract from the
-#     overall effect.
-
-#     4-3: These essays attempt to discuss the impact of this dramatic experience upon the main
-#     character ó and perhaps mention one or more techniques used by McCarthy to effect
-#     this end. The discussion, however, may be inaccurate or undeveloped. These writers may
-#     misread the passage in an essential way, rely on paraphrase, or provide only limited
-#     attention to technique. Illustrations from the text tend to be misconstrued, inexact, or
-#     omitted altogether. The writing may be sufficient to convey ides, although typically it is
-#     characterized by weak diction, syntax, grammar, or organization. Essays scored three are
-#     even less able and may not refer to technique at all.
-
-#     2-1: These essays fail to respond adequately to the question. They may demonstrate confused
-#     thinking and/or consistent weaknesses in grammar or another basic element of
-#     composition. They are often unacceptably brief. Although the writer may have made
-#     some attempt to answer the question, the views presented have little clarity or coherence;
-#     significant problems with reading comprehension seem evident. Essays that are
-#     especially inexact, vacuous, and/or mechanically unsound should be scored 1.
-
-#     0: A response with no more than a reference to the task. 
-#     '''
-
-#     result = evaluate_answer(question, student_answer, ideal_answer, rubric)
-#     print("\n--- Final Result Dictionary ---")
-#     print(result)
+    result = evaluate_answer_by_rubric_items(question, student_answer, ideal_answer, rubric_items)
+    print("\n--- Final Result Dictionary ---")
+    print(result)
