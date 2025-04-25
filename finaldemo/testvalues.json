@@ -1,0 +1,7 @@
+{
+  "question": "What is a binary tree?",
+  "student_answer": "A binary tree can be thought of as a growing list in which every new number is positioned only after it is compared with the numbers that are already present. When you add the first value, it simply starts the collection. For every subsequent value, you look at what is already stored and decide where the newcomer fits by judging whether it is larger or smaller than the values you encounter while moving through the existing entries. This comparison‑based placement continues each time you insert another number, so the entire set stays organised according to how each element relates to the ones that arrived before it. Because of this running sequence of checks, you never have to rearrange the whole list; instead, you only perform local comparisons during insertion, allowing the ordered structure to emerge gradually. Searching follows the same spirit: you compare the target number with entries encountered along the way, ignoring sections that cannot possibly contain the desired value. In short, the defining idea is that the collection remains ordered purely through repeated pairwise comparisons made at the moment each new number joins, producing a self‑maintaining arrangement that supports reasonably direct look‑ups without requiring complete re‑sorting.",
+  "rubrics": [
+    "Accurately defines a binary search tree as a type of tree where the left child is always smaller than the parent, which in turn is smaller than the right child (5 Marks)"
+  ]
+}

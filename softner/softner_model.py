@@ -172,3 +172,47 @@ print(f"Human Scores: {sample['human_scores']} (Avg: {sample['human_avg_score']}
 print(f"ProCoT Score: {sample['procot_score']}")
 print(f"Softened Score: {sample['final_score']:.2f}")
 print("================================\n")
+
+# Load the original JSON file
+with open("procot_eval_with_ideal.json", "r", encoding="utf-8") as f:
+    data = json.load(f)
+
+# Prepare an empty list to store updated records
+result_list = []
+
+# Iterate over every record in the original JSON file
+for record in data:
+    procot = record["procot_score"]
+    student_ans = record["student_answer"]
+    ideal_ans = record["ideal_answer"]
+
+    # Compute similarity metrics and answer length
+    sbert_val = compute_sbert_sim(student_ans, ideal_ans)
+    tfidf_val = compute_tfidf_sim(student_ans, ideal_ans)
+    length = len(student_ans.split())
+
+    # Create a features DataFrame for the current record (ensure the feature_names list is defined)
+    features = pd.DataFrame([[procot, sbert_val, tfidf_val, length]], columns=['procot_score', 'sbert_similarity', 'tfidf_similarity', 'answer_length'])
+    
+    # Predict the softened score using the trained regressor model
+    soft_score = model.predict(features)[0]
+    soft_score = math.ceil(soft_score)  # Use math.ceil to round up, as done previously
+
+    # Create a new record with the additional "softened_score" field
+    new_record = {
+        "question": record["question"],
+        "student_id": record["student_id"],
+        "student_answer": student_ans,
+        "human_scores": record["human_scores"],
+        "human_avg_score": record["human_avg_score"],
+        "procot_score": procot,
+        "ideal_answer": ideal_ans,
+        "softened_score": soft_score
+    }
+    result_list.append(new_record)
+
+# Write the updated records to a new JSON file
+with open("procot_eval_results_softened.json", "w", encoding="utf-8") as outfile:
+    json.dump(result_list, outfile, indent=4, ensure_ascii=False)
+
+print("New JSON file 'procot_eval_results_softened.json' created with softened scores.")
