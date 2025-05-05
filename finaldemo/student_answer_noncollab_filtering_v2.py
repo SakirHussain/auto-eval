@@ -3,10 +3,8 @@ from nltk.tokenize import sent_tokenize
 # nltk.download('punkt', quiet=True)
 
 from sentence_transformers import SentenceTransformer
-# import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
-
 from transformers import pipeline
 
 # 1) Initialize models/pipelines
@@ -18,13 +16,15 @@ zero_shot_classifier = pipeline(
 )
 print("[DEBUG] Models loaded successfully!\n")
 
+
 def sbert_similarity(text: str, question: str) -> float:
     """Compute SBERT-based cosine similarity for (text, question)."""
     if not text.strip():
         return 0.0
-    text_emb = sbert_model.encode([text], convert_to_numpy=True)[0]
-    q_emb = sbert_model.encode([question], convert_to_numpy=True)[0]
-    return float(cosine_similarity(text_emb.reshape(1, -1), q_emb.reshape(1, -1))[0][0])
+    emb1 = sbert_model.encode([text], convert_to_numpy=True)[0]
+    emb2 = sbert_model.encode([question], convert_to_numpy=True)[0]
+    return float(cosine_similarity(emb1.reshape(1, -1), emb2.reshape(1, -1))[0][0])
+
 
 def tfidf_similarity(text: str, question: str) -> float:
     """Compute TF-IDF-based cosine similarity for (text, question)."""
@@ -33,6 +33,7 @@ def tfidf_similarity(text: str, question: str) -> float:
     vectorizer = TfidfVectorizer()
     tfidf_matrix = vectorizer.fit_transform([text, question])
     return float(cosine_similarity(tfidf_matrix[0], tfidf_matrix[1])[0][0])
+
 
 def zero_shot_relevance(text: str, question: str) -> float:
     """Return the 'relevant' probability (0-1) using a zero-shot classifier."""
@@ -46,6 +47,7 @@ def zero_shot_relevance(text: str, question: str) -> float:
     label_scores = dict(zip(zsc_result["labels"], zsc_result["scores"]))
     return float(label_scores.get("relevant", 0.0))
 
+
 def filter_irrelevant_content(
     student_answer: str,
     question: str,
@@ -53,37 +55,33 @@ def filter_irrelevant_content(
     tolerance=0.034
 ) -> str:
     """
-    Single-pass, Rolling Context approach with Tolerance and Dual Checks.
-    
-    1) Tokenize student's answer into sentences.
-    2) Keep a list of accepted sentences, up to `window_size` for context.
+    Rolling Context + Dual-Check Filtering:
+    1) Tokenize student answer into sentences.
+    2) Tokenize question into individual sentences.
     3) For each new sentence:
-       a) recent_context = last N accepted sentences (N=window_size).
-       b) We compute old scores for "recent_context" vs question (SBERT/TF-IDF/Zero-Shot).
-       c) We form candidate_text = (recent_context + new_sentence).
-          Then compute new scores for candidate_text vs question, plus
-          single_sent scores for (new_sentence alone vs. question).
-       d) If EITHER candidate_text or single_sentence check is >= (old_score - tolerance),
-          that method votes "YES."
-       e) If >=2 methods vote YES, we accept this sentence (append to accepted_sentences).
-          We also update the "old scores" to reflect the newly accepted context.
-    4) Return the final accepted text (all accepted sentences joined).
+       a) Build recent_context = last N accepted sentences.
+       b) Compute old TF-IDF and old ZSC scores for recent_context vs full question.
+       c) Form candidate_text = recent_context + new_sentence.
+       d) Compute TF-IDF for candidate_text vs question and single_sentence vs question.
+       e) TF-IDF method votes YES if either sim + tolerance >= old_tfidf.
+       f) Compute SBERT sim of candidate_text and single_sentence against each question sentence,
+          take the maximum; vote YES if max >= sbert_threshold.
+       g) Compute ZSC for candidate_text and single_sentence vs question; vote YES if sim + tolerance >= old_zsc.
+       h) If at least two of three methods vote YES, accept the sentence and update old_tfidf and old_zsc.
+    4) Return the joined accepted sentences.
     """
-
-    print("[DEBUG] Rolling Context + Tolerance Filtering.")
-    print("[DEBUG] Student Answer:\n", student_answer)
-    print("[DEBUG] Question:\n", question)
+    print("[DEBUG] Rolling Context + Dual-Check Filtering.")
     print(f"[DEBUG] window_size={window_size}, tolerance={tolerance}")
 
+    # 1) Split into sentences
     sentences = sent_tokenize(student_answer)
-    print(f"[DEBUG] Found {len(sentences)} sentences.")
+    question_sents = sent_tokenize(question)
+    print(f"[DEBUG] Found {len(sentences)} student sentences; {len(question_sents)} question sentences.")
 
     accepted_sentences = []
-    # We'll track the "old" scores from the last accepted context block
-    # Start with no context => 0.0 for old_sbert/old_tfidf/old_zsc
-    old_sbert = 0.0
     old_tfidf = 0.0
-    old_zsc = 0.0
+    old_zsc   = 0.0
+    sbert_threshold = 0.80
 
     for idx, sent in enumerate(sentences):
         sent_str = sent.strip()
@@ -91,76 +89,57 @@ def filter_irrelevant_content(
             continue
 
         print(f"\n[DEBUG] Sentence {idx+1}: {sent_str}")
-        # Build the rolling context
-        recent_context = accepted_sentences[-window_size:]
-        context_text = " ".join(recent_context)
+        # Build rolling context
+        recent = accepted_sentences[-window_size:]
+        context_text = " ".join(recent)
 
-        # 1) Scores for the old context (just so we can see them)
-        #    Actually we already hold them as old_sbert/old_tfidf/old_zsc,
-        #    but let's do it explicitly if you want more debugging info:
-        old_sbert = sbert_similarity(context_text, question)
+        # Compute old TF-IDF and ZSC on context vs full question
         old_tfidf = tfidf_similarity(context_text, question)
-        old_zsc = zero_shot_relevance(context_text, question)
-        # We'll rely on the stored old scores instead.
+        old_zsc   = zero_shot_relevance(context_text, question)
+        print(f"[DEBUG] Old TF-IDF: {old_tfidf:.4f}, Old ZSC: {old_zsc:.4f}")
 
-        # 2) Candidate text = context + this new sentence
-        if context_text.strip():
-            candidate_text = context_text + " " + sent_str
-        else:
-            candidate_text = sent_str
+        # Candidate context
+        candidate_text = (context_text + " " + sent_str).strip() if context_text else sent_str
 
-        # 3) Evaluate new context
-        cand_sbert = sbert_similarity(candidate_text, question)
-        cand_tfidf = tfidf_similarity(candidate_text, question)
-        cand_zsc = zero_shot_relevance(candidate_text, question)
-
-        # 4) Evaluate single sentence alone
-        single_sbert = sbert_similarity(sent_str, question)
-        single_tfidf = tfidf_similarity(sent_str, question)
-        single_zsc = zero_shot_relevance(sent_str, question)
-
-        print("[DEBUG] Old scores => SBERT: {:.4f}, TF-IDF: {:.4f}, ZSC: {:.4f}".format(
-            old_sbert, old_tfidf, old_zsc
-        ))
-        print("[DEBUG] Candidate ctx => SBERT: {:.4f}, TF-IDF: {:.4f}, ZSC: {:.4f}".format(
-            cand_sbert, cand_tfidf, cand_zsc
-        ))
-        print("[DEBUG] Single sent => SBERT: {:.4f}, TF-IDF: {:.4f}, ZSC: {:.4f}".format(
-            single_sbert, single_tfidf, single_zsc
-        ))
-
-        # 5) Tolerant checking:
-        # Method votes "YES" if either candidate_text or single_sentence
-        # is at least old_score - tolerance
-        sbert_vote = (
-            (cand_sbert + tolerance >= old_sbert) or
-            (single_sbert + tolerance >= old_sbert)
-        )
-        tfidf_vote = (
+        # TF-IDF similarities
+        cand_tfidf   = tfidf_similarity(candidate_text, question)
+        single_tfidf = tfidf_similarity(sent_str,           question)
+        tfidf_vote   = (
             (cand_tfidf + tolerance >= old_tfidf) or
             (single_tfidf + tolerance >= old_tfidf)
         )
-        zsc_vote = (
+        print(f"[DEBUG] TF-IDF -> Candidate: {cand_tfidf:.4f}, Single: {single_tfidf:.4f}, Vote: {tfidf_vote}")
+
+        # SBERT (cosine) threshold check against each question sentence
+        cand_vals   = [sbert_similarity(candidate_text, q) for q in question_sents]
+        single_vals = [sbert_similarity(sent_str,      q) for q in question_sents]
+        cand_max    = max(cand_vals,   default=0.0)
+        single_max  = max(single_vals, default=0.0)
+        sbert_vote  = (cand_max >= sbert_threshold) or (single_max >= sbert_threshold)
+        print(f"[DEBUG] SBERT -> Candidate max: {cand_max:.4f}, Single max: {single_max:.4f}, Vote: {sbert_vote}")
+
+        # Zero-shot relevance (delta-check)
+        cand_zsc   = zero_shot_relevance(candidate_text, question)
+        single_zsc = zero_shot_relevance(sent_str,      question)
+        zsc_vote   = (
             (cand_zsc + tolerance >= old_zsc) or
             (single_zsc + tolerance >= old_zsc)
         )
+        print(f"[DEBUG] ZSC -> Candidate: {cand_zsc:.4f}, Single: {single_zsc:.4f}, Vote: {zsc_vote}")
 
-        votes = sum([sbert_vote, tfidf_vote, zsc_vote])
-        print(f"[DEBUG] Votes => SBERT: {sbert_vote}, TF-IDF: {tfidf_vote}, ZSC: {zsc_vote} (Total={votes})")
+        # Majority vote
+        votes = sum([tfidf_vote, sbert_vote, zsc_vote])
+        print(f"[DEBUG] Votes => TF-IDF: {tfidf_vote}, SBERT: {sbert_vote}, ZSC: {zsc_vote} (Total={votes})")
 
-        # 6) Majority: 2 of 3
         if votes >= 2:
             print("[DEBUG] Accepting this sentence.")
             accepted_sentences.append(sent_str)
-            # Update the old scores to reflect new context
-            # We consider the candidate_text the new context
-            old_sbert = cand_sbert
             old_tfidf = cand_tfidf
-            old_zsc = cand_zsc
+            old_zsc   = cand_zsc
         else:
             print("[DEBUG] Rejecting this sentence.")
 
-    # Reconstruct final accepted answer
+    # Return accepted text
     final_text = " ".join(accepted_sentences)
     print("\n[DEBUG] FINAL ACCEPTED TEXT:")
     print(final_text)

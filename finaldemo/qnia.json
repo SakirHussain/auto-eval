@@ -1,0 +1,89 @@
+{
+  "question": "Frequency of an integer in an array is the number of occurrences of that number in the array. Given an array A of n integers, design two different algorithms each using two different design techniques to arrange the integers of A in such a way that the integers with higher frequency appear first. If two integers have the same frequency, sort them in ascending order. For the input [4,5,6,5,6,4,3,3,6,13], your pseudocode should give the output [6,6,6,3,3,4,4,5,5,13]. Your 'design' should involve all the required steps. Analyse your algorithm with all the steps involved. [15 marks]",
+  "rubrics": [
+    {
+      "rubric": "Logic",
+      "marks": 2
+    },
+    {
+      "rubric": "Illustration",
+      "marks": 4
+    },
+    {
+      "rubric": "Pseudocode",
+      "marks": 6
+    },
+    {
+      "rubric": "Time Complexity",
+      "marks": 3
+    }
+  ],
+  "ideal_answers": {
+    "answer_1": {
+      "full_text": "The first algorithm builds a hash map of frequencies and sorts the array based on (-frequency, value) using a stable sort, ensuring that higher frequency elements come first and ties are broken by ascending values. The second algorithm uses a max-heap where each element is pushed as (-frequency, value) and popped to maintain this order, ensuring that the highest frequency elements are output first with correct ascending order among ties. For the input [4,5,6,5,6,4,3,3,6,13], frequency map is {4:2, 5:2, 6:3, 3:2, 13:1}. Sorting or popping gives [6,6,6,3,3,4,4,5,5,13]. Pseudocode for the first method: (1) Build frequency map. (2) Sort A using key (-frequency_map[x], x). Pseudocode for second method: (1) Build frequency map. (2) Push (-frequency, value) into heap. (3) Pop elements and replicate based on frequency. First method takes O(n log n) time for sorting, second method O(n log n) for heap operations.",
+      "marks": 15,
+      "split_by_rubric": {
+        "Logic": {
+          "text": "The first algorithm builds a hash map of frequencies and sorts the array based on (-frequency, value) using a stable sort, ensuring that higher frequency elements come first and ties are broken by ascending values. The second algorithm uses a max-heap where each element is pushed as (-frequency, value) and popped to maintain this order, ensuring that the highest frequency elements are output first with correct ascending order among ties.",
+          "marks": 0
+        },
+        "Illustration": {
+          "text": "For the input [4,5,6,5,6,4,3,3,6,13], frequency map is {4:2, 5:2, 6:3, 3:2, 13:1}. Sorting or popping gives [6,6,6,3,3,4,4,5,5,13].",
+          "marks": 4
+        },
+        "Pseudocode": {
+          "text": "Pseudocode for the first method: (1) Build frequency map. (2) Sort A using key (-frequency_map[x], x). Pseudocode for second method: (1) Build frequency map. (2) Push (-frequency, value) into heap. (3) Pop elements and replicate based on frequency.",
+          "marks": 6
+        },
+        "Time Complexity": {
+          "text": "First method takes O(n log n) time for sorting, second method O(n log n) for heap operations.",
+          "marks": 3
+        }
+      }
+    },
+    "answer_2": {
+      "full_text": "The first algorithm uses a bucket sort approach: elements are grouped into buckets based on frequency, and each bucket's elements are sorted in ascending order before being appended to the result. The second algorithm creates (frequency, value) tuples and uses a stable counting sort variant to first sort by frequency descending and then by value ascending. In input [4,5,6,5,6,4,3,3,6,13], frequency map is {4:2, 5:2, 6:3, 3:2, 13:1}, resulting in buckets: 3->[6], 2->[3,4,5], 1->[13]. Traversing buckets high to low, sorting inside, outputs [6,6,6,3,3,4,4,5,5,13]. Pseudocode for bucket sort: (1) Build frequency map. (2) Create frequency-indexed buckets. (3) Sort and traverse. Pseudocode for tuple sort: (1) Build (frequency, value) list. (2) Sort stably by frequency descending then value ascending. Bucket sort takes O(n + k log k) and counting sort variant O(n + k) assuming bounded frequency.",
+      "marks": 15,
+      "split_by_rubric": {
+        "Logic": {
+          "text": "The first algorithm uses a bucket sort approach: elements are grouped into buckets based on frequency, and each bucket's elements are sorted in ascending order before being appended to the result. The second algorithm creates (frequency, value) tuples and uses a stable counting sort variant to first sort by frequency descending and then by value ascending. ",
+          "marks": 0
+        },
+        "Illustration": {
+          "text": "In input [4,5,6,5,6,4,3,3,6,13], frequency map is {4:2, 5:2, 6:3, 3:2, 13:1}, resulting in buckets: 3->[6], 2->[3,4,5], 1->[13]. Traversing buckets high to low, sorting inside, outputs [6,6,6,3,3,4,4,5,5,13].",
+          "marks": 4
+        },
+        "Pseudocode": {
+          "text": "Pseudocode for bucket sort: (1) Build frequency map. (2) Create frequency-indexed buckets. (3) Sort and traverse. Pseudocode for tuple sort: (1) Build (frequency, value) list. (2) Sort stably by frequency descending then value ascending.",
+          "marks": 6
+        },
+        "Time Complexity": {
+          "text": "Bucket sort takes O(n + k log k) and counting sort variant O(n + k) assuming bounded frequency.",
+          "marks": 3
+        }
+      }
+    },
+    "answer_3": {
+      "full_text": "The first algorithm uses a two-pass sort strategy: first sort elements ascendingly to prepare for stable frequency sort, then sort based on frequency descending. This ensures tie-breaking by smaller values automatically due to stability. The second approach groups numbers into a frequency-indexed dictionary and reconstructs the array by processing highest to lowest frequency groups, each sorted ascending. For input [4,5,6,5,6,4,3,3,6,13], after initial sort: [3,3,4,4,5,5,6,6,6,13], then frequency sort yields [6,6,6,3,3,4,4,5,5,13]. In grouping, groups become 3->[6], 2->[3,4,5], 1->[13], ordered descending. Pseudocode for first: (1) Build frequency map. (2) Sort A ascending. (3) Sort A based on descending frequency_map[x]. Pseudocode for second: (1) Build frequency map. (2) Group into frequency buckets. (3) Sort each group. (4) Traverse and expand. Both methods take O(n log n) time overall.",
+      "marks": 15,
+      "split_by_rubric": {
+        "Logic": {
+          "text": "The first algorithm uses a two-pass sort strategy: first sort elements ascendingly to prepare for stable frequency sort, then sort based on frequency descending. This ensures tie-breaking by smaller values automatically due to stability. The second approach groups numbers into a frequency-indexed dictionary and reconstructs the array by processing highest to lowest frequency groups, each sorted ascending.",
+          "marks": 0
+        },
+        "Illustration": {
+          "text": "For input [4,5,6,5,6,4,3,3,6,13], after initial sort: [3,3,4,4,5,5,6,6,6,13], then frequency sort yields [6,6,6,3,3,4,4,5,5,13]. In grouping, groups become 3->[6], 2->[3,4,5], 1->[13], ordered descending.",
+          "marks": 4
+        },
+        "Pseudocode": {
+          "text": "Pseudocode for first: (1) Build frequency map. (2) Sort A ascending. (3) Sort A based on descending frequency_map[x]. Pseudocode for second: (1) Build frequency map. (2) Group into frequency buckets. (3) Sort each group. (4) Traverse and expand.",
+          "marks": 6
+        },
+        "Time Complexity": {
+          "text": "Both methods take O(n log n) time overall.",
+          "marks": 3
+        }
+      }
+    }
+  }
+}
