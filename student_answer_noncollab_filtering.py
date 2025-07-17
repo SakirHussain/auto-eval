@@ -98,9 +98,9 @@ def filter_irrelevant_content(
         # 1) Scores for the old context (just so we can see them)
         #    Actually we already hold them as old_sbert/old_tfidf/old_zsc,
         #    but let's do it explicitly if you want more debugging info:
-        # old_sbert = sbert_similarity(context_text, question)
-        # old_tfidf = tfidf_similarity(context_text, question)
-        # old_zsc = zero_shot_relevance(context_text, question)
+        old_sbert = sbert_similarity(context_text, question)
+        old_tfidf = tfidf_similarity(context_text, question)
+        old_zsc = zero_shot_relevance(context_text, question)
         # We'll rely on the stored old scores instead.
 
         # 2) Candidate text = context + this new sentence
@@ -191,7 +191,7 @@ if __name__ == "__main__":
         Once the software architecture is defined for the interation, the coding/implementation begins.
         Coding is usually pair programming. The modules selected such as UI, bikesharing, ride hailing and public transport are developed.
         Once they are developed, they are tested agasint the member of the team or in this case a public jury/citizen jury is used to check the appeal of the UI.
-        If it is satisfactory, the component is completed and implemented into the application, if not, the feedback is sent as an input for the next iteration and the process is repeated again.
+        If it is satisfactory, the component is com pleted and implemented into the application, if not, the feedback is sent as an input for the next iteration and the process is repeated again.
     
     """
 
