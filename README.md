@@ -80,12 +80,11 @@ This project utilizes a combination of locally run and Hugging Face models:
 ├───config.py                           # Centralized configuration for paths, model names, and parameters.
 ├───graphrag_sakir.py                   # Implements the Graph RAG pipeline for ideal answer generation.
 ├───os.pdf                              # The PDF document used as source material for RAG.
-├───proactive_chain_of_thought_gaurdrails.py # Core logic for ProCoT evaluation and iterative refinement.
+├───proactive_chain_of_thought.py       # Core logic for ProCoT evaluation and iterative refinement.
 ├───procot_eval_with_ideal.json         # Dataset for training the score softening model.
 ├───prompts.py                          # Stores all LLM prompt templates.
 ├───qnia.json                           # Ideal answers data (used by clustering).
 ├───requirements.txt                    # Python dependencies.
-├───softener_gbr.joblib                 # Persisted machine learning model for score softening.
 ├───softner.py                          # Implements the score softening model training and inference.
 ├───student_answer_noncollab_filtering_v2.py # Improved non-collaborative content filtering.
 ├───student_answer_noncollab_filtering.py    # Original non-collaborative content filtering (deprecated).
@@ -161,5 +160,3 @@ To launch the interactive Streamlit application:
 ```bash
 streamlit run app.py
 ```
-
-This will open the application in your web browser, typically at `http://localhost:8501`.
