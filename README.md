@@ -69,41 +69,6 @@ This project utilizes a combination of locally run and Hugging Face models:
   - `sentence-transformers/all-MiniLM-L6-v2`: Used by `sentence-transformers` for generating embeddings in clustering, non-collaborative filtering, and score softening.
   - `facebook/bart-large-mnli`: Used by the `transformers` pipeline for zero-shot classification in the non-collaborative filtering module.
 
-## Project Structure
-
-```
-.
-├───answer_clustering.py                # Implements student answer clustering and visualization.
-├───api.py                              # FastAPI application for exposing evaluation endpoints.
-├───app.py                              # Streamlit frontend for interactive demo.
-├───auto_eval_research_paper.pdf        # Example PDF document for Graph RAG.
-├───config.py                           # Centralized configuration for paths, model names, and parameters.
-├───graphrag_sakir.py                   # Implements the Graph RAG pipeline for ideal answer generation.
-├───os.pdf                              # The PDF document used as source material for RAG.
-<<<<<<< HEAD
-├───proactive_chain_of_thought_gaurdrails.py # Core logic for ProCoT evaluation and iterative refinement.
-=======
-├───proactive_chain_of_thought.py       # Core logic for ProCoT evaluation and iterative refinement.
-├───procot_eval_with_ideal.json         # Dataset for training the score softening model.
->>>>>>> d38d883ba8b61e03a69660a424b5f6bd571f4b13
-├───prompts.py                          # Stores all LLM prompt templates.
-├───requirements.txt                    # Python dependencies.
-├───softner.py                          # Implements the score softening model training and inference.
-├───student_answer_noncollab_filtering_v2.py # Improved non-collaborative content filtering.
-├───student_answer_noncollab_filtering.py    # Original non-collaborative content filtering (deprecated).
-├───data/                               # Directory for all JSON data files.
-    ├───procot_eval_with_ideal.json     # Dataset for training the score softening model.
-    ├───qnia.json                       # Ideal answers data (used by clustering).
-    └───student_answers.json            # Student answers data (used by clustering).
-├───.git/                               # Git repository files.
-└───corpora/                            # Directory for processed data (vectorstores, knowledge graphs).
-    └───os/
-        ├───os_kg.gpickle               # Knowledge graph for 'os.pdf'.
-        └───vectorstore/
-            ├───index.faiss             # FAISS index for 'os.pdf'.
-            └───index.pkl               # FAISS index metadata.
-```
-
 ## Setup and Installation
 
 ### Prerequisites
