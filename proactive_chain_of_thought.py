@@ -14,7 +14,7 @@ from langchain.memory import ConversationBufferMemory
 # Local imports
 import config
 from prompts import ITERATIVE_PROMPT_TEMPLATE, PROCOT_PROMPT_TEMPLATE
-from student_answer_noncollab_filtering import filter_irrelevant_content
+from student_answer_noncollab_filtering_v2 import filter_irrelevant_content
 from answer_clustering import StudentAnswerClustering
 
 # --- Pydantic Models for Structured Output ---

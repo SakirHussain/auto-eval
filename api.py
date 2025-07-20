@@ -3,8 +3,8 @@ from fastapi import FastAPI, Request, HTTPException
 from starlette.responses import JSONResponse
 
 # Import your existing functions directly
-from graphrag_sakir import rag_generate
-from proactive_chain_of_thought_gaurdrails import evaluate_answer_by_rubric_items
+from graphrag import rag_generate
+from proactive_chain_of_thought import evaluate_answer_by_rubric_items
 from softner import predict_softened_score
 
 app = FastAPI()
