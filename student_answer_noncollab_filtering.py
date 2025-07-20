@@ -9,12 +9,15 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 from transformers import pipeline
 
+# Local imports
+import config
+
 # 1) Initialize models/pipelines
 print("[DEBUG] Initializing SBERT model and zero-shot classifier...")
-sbert_model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+sbert_model = SentenceTransformer(config.EMBEDDING_MODEL)
 zero_shot_classifier = pipeline(
     "zero-shot-classification",
-    model="facebook/bart-large-mnli"
+    model=config.ZERO_SHOT_CLASSIFIER_MODEL
 )
 print("[DEBUG] Models loaded successfully!\n")
 
@@ -49,8 +52,8 @@ def zero_shot_relevance(text: str, question: str) -> float:
 def filter_irrelevant_content(
     student_answer: str,
     question: str,
-    window_size=3,
-    tolerance=0.034
+    window_size=config.FILTERING_WINDOW_SIZE,
+    tolerance=config.FILTERING_TOLERANCE
 ) -> str:
     """
     Single-pass, Rolling Context approach with Tolerance and Dual Checks.

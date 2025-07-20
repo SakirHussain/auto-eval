@@ -21,12 +21,15 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.model_selection import train_test_split
 
+# Local imports
+import config
+
 # ────────────────────────────────────────────────────────────
 # Configuration
 # ────────────────────────────────────────────────────────────
-DATA_PATH   = "procot_eval_with_ideal.json"        # training set
-MODEL_PATH  = pathlib.Path("softener_gbr.joblib")   # where to save
-EMBED_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+DATA_PATH   = config.DATA_PATH
+MODEL_PATH  = pathlib.Path(config.MODEL_PATH)
+EMBED_MODEL = config.EMBEDDING_MODEL
 
 # ────────────────────────────────────────────────────────────
 # Utility functions

@@ -7,7 +7,12 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_ollama import OllamaEmbeddings, OllamaLLM
 from langchain_community.vectorstores import FAISS
-from langchain.prompts import PromptTemplate
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.runnables import RunnablePassthrough
+
+# Local imports
+import config
+from prompts import RAG_PROMPT_TEMPLATE
 
 ##############################
 #  Debug Utility
@@ -24,30 +29,7 @@ def clean_text(text):
     return text
 
 ##############################
-#  PDF Loading & Chunking
-##############################
-def load_textbook(pdf_path):
-    debug(f"Loading PDF: {pdf_path}")
-    loader = PyPDFLoader(pdf_path)
-    docs = loader.load()
-    debug(f"Loaded {len(docs)} pages")
-
-    cleaned = [clean_text(doc.page_content) for doc in docs]
-    return "\n\n".join(cleaned)
-
-def chunk_text(text, chunk_size=1000, chunk_overlap=100):
-    debug(f"Splitting text into chunks (chunk_size={chunk_size}, overlap={chunk_overlap})")
-    splitter = RecursiveCharacterTextSplitter(
-        chunk_size=chunk_size,
-        chunk_overlap=chunk_overlap,
-        separators=["\n\n", "\n", ".", " "]
-    )
-    chunks = splitter.split_text(text)
-    debug(f"Created {len(chunks)} chunks")
-    return chunks
-
-##############################
-#  Knowledge Graph
+#  Knowledge Graph (for future use with a custom retriever)
 ##############################
 def build_knowledge_graph(chunks):
     debug(f"Building knowledge graph with {len(chunks)} nodes")
@@ -57,7 +39,7 @@ def build_knowledge_graph(chunks):
         G.add_node(node_id, text=chunk)
     return G
 
-def create_chunk_relationships(G, embeddings_dict, threshold=0.8):
+def create_chunk_relationships(G, embeddings_dict, threshold):
     debug(f"Creating edges (threshold={threshold})...")
     node_list = list(G.nodes)
     count = 0
@@ -72,144 +54,86 @@ def create_chunk_relationships(G, embeddings_dict, threshold=0.8):
                 count += 2
     debug(f"Added {count} edges")
 
-##############################
-#  Vector Store
-##############################
-def embed_nodes_create_faiss(G, model="bge-m3"):
+def embed_nodes(G, model):
     debug(f"Embedding nodes with model='{model}'")
     embeddings = OllamaEmbeddings(model=model)
-    node_list = list(G.nodes)
-    node_texts = [G.nodes[n]["text"] for n in node_list]
-
-    faiss_store = FAISS.from_texts(node_texts, embeddings)
-
     embeddings_dict = {}
-    for node in node_list:
+    for node in G.nodes():
         embeddings_dict[node] = embeddings.embed_query(G.nodes[node]["text"])
-
     debug("Embedding complete")
-    return faiss_store, embeddings_dict
-
-def vector_search(query, faiss_store, k=3):
-    debug(f"Running vector search: '{query}'")
-    results = faiss_store.similarity_search(query, k=k)
-    debug(f"Found {len(results)} results")
-    return results
+    return embeddings_dict
 
 ##############################
-#  Graph Expansion
-##############################
-def expand_with_graph(results, G, max_depth=1):
-    debug(f"Expanding context (depth={max_depth})")
-    expanded = set()
-    node_list = list(G.nodes)
-
-    for doc in results:
-        content = doc.page_content
-        for node in node_list:
-            if G.nodes[node]['text'] == content:
-                queue = [(node, 0)]
-                visited = set()
-                while queue:
-                    current, depth = queue.pop()
-                    if current in visited or depth > max_depth:
-                        continue
-                    visited.add(current)
-                    expanded.add(G.nodes[current]['text'])
-                    for neighbor in G.neighbors(current):
-                        queue.append((neighbor, depth + 1))
-    debug(f"Expanded context size: {len(expanded)}")
-    return list(expanded)
-
-##############################
-#  Prompt
-##############################
-prompt_template = PromptTemplate(
-    template="""
-    You are a college professor tasked with generating a structured and comprehensive answer for a given question taking help from the retrieved knowledge.  
-    The answer will be worth 10 marks in total so the answer MUST BE 200 WORDS OR MORE.
-
-    Task Overview
-    - Use Chain-of-Thought (CoT) reasoning to analyze the question step by step.
-    - Extract key insights from the provided context.
-    - Construct a well-structured, paragraph-based answer that directly satisfies the rubric criteria.
-
-    <question>
-    {question}
-    </question>
-    
-    <rubric>
-    {rubric_items}
-    </rubric>
-
-    Retrieved Context
-    The following context has been retrieved from reliable sources.  
-    Use this information to construct an accurate and detailed response to the given question:
-
-    <context>
-    {context}
-    </context>
-
-    Response Generation Guidelines
-    - The response must be a fully detailed and structured answer.  
-    - DO NOT include any explanations, formatting, labels, or extra text—only generate the answer.  
-    - The output should be a cohesive, well-written paragraph addressing all rubric points. 
-    """,
-    input_variables=["context", "question", "rubric_items"]
-)
-
-##############################
-#  Main
+#  Main RAG Generation Function
 ##############################
 def rag_generate(query, rubric_items):
-    pdf_path = "os.pdf"
+    pdf_path = config.PDF_PATH
     base = os.path.splitext(os.path.basename(pdf_path))[0]
-    out_dir = f"corpora/{base}"
+    out_dir = os.path.join(config.CORPORA_DIR, base)
+    vectorstore_path = os.path.join(out_dir, "vectorstore")
+    kg_path = os.path.join(out_dir, f"{base}_kg.gpickle")
+    
     os.makedirs(out_dir, exist_ok=True)
 
-    # === Check if already processed ===
-    if not os.path.exists(f"{out_dir}/vectorstore"):
-        debug("No existing store. Starting fresh...")
-        text = load_textbook(pdf_path)
-        chunks = chunk_text(text)
+    embeddings = OllamaEmbeddings(model=config.OLLAMA_EMBEDDING_MODEL)
 
-        # Knowledge Graph
-        G = build_knowledge_graph(chunks)
-
-        # Embeddings & FAISS
-        faiss_store, embeddings_dict = embed_nodes_create_faiss(G)
-        create_chunk_relationships(G, embeddings_dict, threshold=0.8)
-
-        # Save
-        debug("Saving vectorstore & knowledge graph...")
-        faiss_store.save_local(f"{out_dir}/vectorstore")
-        nx.write_gpickle(G, f"{out_dir}/{base}_kg.gpickle")
-        debug("Saved successfully")
+    # === Check if vector store and graph are already processed ===
+    if not os.path.exists(vectorstore_path):
+        debug("No existing vector store found. Starting fresh...")
+        
+        # 1. Load and Chunk Documents
+        loader = PyPDFLoader(pdf_path)
+        docs = loader.load()
+        cleaned_content = [clean_text(doc.page_content) for doc in docs]
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=1000, chunk_overlap=100, separators=["\n\n", "\n", ". ", " "]
+        )
+        splits = text_splitter.create_documents(cleaned_content)
+        
+        # 2. Create and save FAISS vector store
+        debug(f"Creating and saving vectorstore to {vectorstore_path}")
+        vectorstore = FAISS.from_documents(documents=splits, embedding=embeddings)
+        vectorstore.save_local(vectorstore_path)
+        
+        # 3. Build and save Knowledge Graph
+        debug(f"Building and saving knowledge graph to {kg_path}")
+        text_chunks = [doc.page_content for doc in splits]
+        G = build_knowledge_graph(text_chunks)
+        embeddings_dict = embed_nodes(G, model=config.OLLAMA_EMBEDDING_MODEL)
+        create_chunk_relationships(G, embeddings_dict, threshold=config.SIMILARITY_THRESHOLD)
+        nx.write_gpickle(G, kg_path)
+        
+        debug("Initial processing complete.")
     else:
         debug("Vectorstore & knowledge graph found. Loading...")
+        vectorstore = FAISS.load_local(vectorstore_path, embeddings, allow_dangerous_deserialization=True)
+        # G = nx.read_gpickle(kg_path) # Graph is loaded but not yet used in the LCEL chain
 
-    # === Reload & Test ===
-    embeddings = OllamaEmbeddings(model="bge-m3")
-    faiss_store = FAISS.load_local(f"{out_dir}/vectorstore", embeddings, allow_dangerous_deserialization=True)
-    G = nx.read_gpickle(f"{out_dir}/{base}_kg.gpickle")
-    debug(f"Graph loaded: {len(G.nodes)} nodes, {len(G.edges)} edges")
+    # === Create LangChain RAG Chain using LCEL ===
+    llm = OllamaLLM(model=config.OLLAMA_LLM_MODEL, temperature=0.7)
+    retriever = vectorstore.as_retriever()
 
-    # === Example Query ===
-    # query = "What is the use of a kernel?"
-    results = vector_search(query, faiss_store, k=3)
-    print("\n===== TOP 3 =====")
-    print(results)
-    expanded = expand_with_graph(results, G, max_depth=1)
-    print("\n===== EXPANDED =====")
-    print(expanded)
-    context = "\n".join(expanded)
+    def format_docs(docs):
+        return "\n\n".join(doc.page_content for doc in docs)
 
-    # === LLM Answer ===
-    prompt = prompt_template.format(context=context, question=query, rubric_items="\n".join(rubric_items))
-    debug(f"Invoking LLM: 'gemma3:4b'")
-    llm = OllamaLLM(model="gemma3:4b", temperature=0.7)
-    answer = llm.invoke(prompt)
+    # LangChain Expression Language (LCEL) chain
+    rag_chain = (
+        {
+            "context": (lambda x: x["question"]) | retriever | format_docs,
+            "question": lambda x: x["question"],
+            "rubric_items": lambda x: x["rubric_items"]
+        }
+        | RAG_PROMPT_TEMPLATE
+        | llm
+        | StrOutputParser()
+    )
 
-    print("\n===== FINAL ANSWER =====")
-    print(answer)
-    return answer
+    debug(f"Invoking RAG chain for query: '{query}'")
+    final_answer = rag_chain.invoke({
+        "question": query,
+        "rubric_items": "\n".join(rubric_items)
+    })
+    
+    print("\n===== FINAL ANSWER (from LangChain) =====")
+    print(final_answer)
+    return final_answer

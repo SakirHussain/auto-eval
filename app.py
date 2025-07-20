@@ -2,7 +2,7 @@ import streamlit as st
 from proactive_chain_of_thought_gaurdrails import evaluate_answer_by_rubric_items
 from graphrag_sakir import rag_generate
 from softner import predict_softened_score
-
+import config
 
 st.title("📚 Graph RAG + ProCoT Evaluation System")
 
@@ -57,7 +57,7 @@ if "ideal_answer" in st.session_state:
             
             st.markdown(
                 f"""
-            **ProCoT Total:** `{evaluation['total_score']:.2f}`  
-            **Softened Score:** `{softened}`  
+            **ProCoT Total:** `{evaluation['total_score']:.2f}`  
+            **Softened Score:** `{softened}`  
             """
             )

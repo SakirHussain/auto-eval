@@ -5,6 +5,8 @@ from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.decomposition import PCA
 from sentence_transformers import SentenceTransformer
 
+# Local imports
+import config
 
 def debug(msg: str):
     """Simple debug logger."""
@@ -16,14 +18,14 @@ class StudentAnswerClustering:
         self,
         ideal_answers_path: str,
         student_answers_path: str,
-        threshold: float = 0.80,
+        threshold: float = config.CLUSTERING_THRESHOLD,
     ):
         debug("Initializing StudentAnswerClustering")
         debug(f"Ideal path={ideal_answers_path}, Student path={student_answers_path}, threshold={threshold}")
         self.ideal_answers_path = ideal_answers_path
         self.student_answers_path = student_answers_path
         self.threshold = threshold
-        self.model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+        self.model = SentenceTransformer(config.EMBEDDING_MODEL)
 
         # Raw entries
         self.ideal_entries = []   # list of dicts from qnia.json
@@ -41,7 +43,7 @@ class StudentAnswerClustering:
         self.unclustered = []
         self.clusters = {}
 
-    def load_data(self):
+    def load_data():
         # Load ideal answers
         debug(f"Loading ideal answers from '{self.ideal_answers_path}'")
         with open(self.ideal_answers_path, 'r') as f:
@@ -81,7 +83,7 @@ class StudentAnswerClustering:
             self.student_texts.append(txt)
         debug(f"Extracted {len(self.student_texts)} student texts for embedding")
 
-    def cluster_answers(self):
+    def cluster_answers():
         # Compute embeddings
         debug("Encoding ideal answer embeddings...")
         ideal_emb = self.model.encode(self.ideal_texts)
@@ -128,13 +130,13 @@ class StudentAnswerClustering:
             debug("--> No mapping found; unclustered")
             return {'message': 'Unclustered: needs manual grading'}
 
-    def print_unclustered(self):
+    def print_unclustered():
         debug("Listing unclustered student answers:")
         for idx in self.unclustered:
             print(f"\n[UNCLUSTERED] Student #{idx}:")
             print(self.student_texts[idx])
 
-    def visualize_clusters(self):
+    def visualize_clusters():
         # PCA 2D for visualization only
         debug("Starting 2D PCA visualization")
         ideal_emb = self.model.encode(self.ideal_texts)
@@ -175,9 +177,9 @@ class StudentAnswerClustering:
 
 if __name__ == '__main__':
     clustering = StudentAnswerClustering(
-        ideal_answers_path='qnia.json',
-        student_answers_path='student_answers.json',
-        threshold=0.80
+        ideal_answers_path=config.IDEAL_ANSWERS_PATH,
+        student_answers_path=config.STUDENT_ANSWERS_PATH,
+        threshold=config.CLUSTERING_THRESHOLD
     )
     clustering.load_data()
     clustering.cluster_answers()

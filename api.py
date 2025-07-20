@@ -3,8 +3,9 @@ from fastapi import FastAPI, Request, HTTPException
 from starlette.responses import JSONResponse
 
 # Import your existing functions directly
-from graphrag_sakir import generate_ideal
+from graphrag_sakir import rag_generate
 from proactive_chain_of_thought_gaurdrails import evaluate_answer_by_rubric_items
+from softner import predict_softened_score
 
 app = FastAPI()
 
@@ -12,8 +13,8 @@ app = FastAPI()
 async def gen_ideal(req: Request):
     payload = await req.json()
     try:
-        # assume payload contains {"text": "..."}
-        return JSONResponse(generate_ideal(payload["text"]))
+        # assume payload contains {"question": "...", "rubric_items": [...]}
+        return JSONResponse(rag_generate(payload["question"], payload["rubric_items"]))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -21,11 +22,11 @@ async def gen_ideal(req: Request):
 async def evaluate(req: Request):
     payload = await req.json()
     try:
-        # assume payload has {"question": "...", "student_answer": "..."}
-        score, history = evaluate_answer_by_rubric_items(
-            payload["question"], payload["student_answer"]
+        # assume payload has {"question": "...", "student_answer": "...", "ideal_answer": "...", "rubric_items": [...]}
+        evaluation = evaluate_answer_by_rubric_items(
+            payload["question"], payload["ideal_answer"], payload["student_answer"], payload["rubric_items"]
         )
-        return JSONResponse({"score": score, "history": history})
+        return JSONResponse(evaluation)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -33,7 +34,10 @@ async def evaluate(req: Request):
 async def soften(req: Request):
     payload = await req.json()
     try:
-        # assume payload {"score": 7.5}
-        return JSONResponse({"softened_score": soften_score(payload["score"])})
+        # assume payload {"procot_score": 7.5, "student_answer": "...", "ideal_answer": "..."}
+        softened_score = predict_softened_score(
+            payload["procot_score"], payload["student_answer"], payload["ideal_answer"]
+        )
+        return JSONResponse({"softened_score": softened_score})
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
