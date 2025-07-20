@@ -3,10 +3,10 @@ Centralized configuration for the Auto-Evaluation project.
 """
 
 # File Paths
-DATA_PATH = "procot_eval_with_ideal.json"
+DATA_PATH = "data/procot_eval_with_ideal.json"
 MODEL_PATH = "softener_gbr.joblib"
-IDEAL_ANSWERS_PATH = "qnia.json"
-STUDENT_ANSWERS_PATH = "student_answers.json"
+IDEAL_ANSWERS_PATH = "data/qnia.json"
+STUDENT_ANSWERS_PATH = "data/student_answers.json"
 PDF_PATH = "os.pdf"
 CORPORA_DIR = "corpora"
 
